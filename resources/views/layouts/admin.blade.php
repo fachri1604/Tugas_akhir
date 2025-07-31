@@ -16,7 +16,7 @@
         [x-cloak] { display: none !important; }
     </style>
 </head>
-<body class="font-inter antialiased bg-gray-50 text-gray-800" x-data="{ sidebarOpen: false }">
+<body class="font-inter antialiased bg-gray-50 text-gray-800" x-data="{ sidebarOpen: false, showLogoutModal: false }">
     <!-- Mobile Sidebar Backdrop -->
     <div x-show="sidebarOpen" 
          x-transition:enter="transition-opacity ease-linear duration-300"
@@ -48,46 +48,46 @@
             <!-- Navigation -->
             <nav class="flex-1 px-4 py-6 overflow-y-auto">
                 <ul class="space-y-2">
-    <li>
-        <a href="{{ route('admin.dashboard') }}" 
-           class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
-                  {{ request()->routeIs('admin.dashboard') ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50' }}">
-            <i class="fas fa-tachometer-alt mr-3"></i>
-            <span>Dashboard</span>
-        </a>
-    </li>
-    <li>
-        <a href="{{ route('admin.produk') }}" 
-           class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
-                  {{ request()->routeIs('admin.produk*') ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50' }}">
-            <i class="fas fa-tshirt mr-3"></i>
-            <span>Produk</span>
-        </a>
-    </li>
-    <li>
-        <a href="{{ route('admin.pengguna') }}" 
-           class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
-                  {{ request()->routeIs('admin.pengguna*') ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50' }}">
-            <i class="fas fa-users mr-3"></i>
-            <span>Pengguna</span>
-        </a>
-    </li>
-    <li>
-        <a href="{{ route('admin.kategori') }}" 
-           class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
-                  {{ request()->routeIs('admin.kategori*') ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50' }}">
-            <i class="fas fa-tags mr-3"></i>
-            <span>Kategori</span>
-        </a>
-    </li>
-    <li>
-        <a href="#" 
-           class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50">
-            <i class="fas fa-shopping-cart mr-3"></i>
-            <span>Pesanan</span>
-        </a>
-    </li>
-</ul>
+                    <li>
+                        <a href="{{ route('admin.dashboard') }}" 
+                           class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
+                                  {{ request()->routeIs('admin.dashboard') ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50' }}">
+                            <i class="fas fa-tachometer-alt mr-3"></i>
+                            <span>Dashboard</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ route('admin.produk') }}" 
+                           class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
+                                  {{ request()->routeIs('admin.produk*') ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50' }}">
+                            <i class="fas fa-tshirt mr-3"></i>
+                            <span>Produk</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ route('admin.pengguna') }}" 
+                           class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
+                                  {{ request()->routeIs('admin.pengguna*') ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50' }}">
+                            <i class="fas fa-users mr-3"></i>
+                            <span>Pengguna</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ route('admin.kategori') }}" 
+                           class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
+                                  {{ request()->routeIs('admin.kategori*') ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50' }}">
+                            <i class="fas fa-tags mr-3"></i>
+                            <span>Kategori</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" 
+                           class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50">
+                            <i class="fas fa-shopping-cart mr-3"></i>
+                            <span>Pesanan</span>
+                        </a>
+                    </li>
+                </ul>
             </nav>
 
             <!-- User Profile & Logout -->
@@ -101,16 +101,50 @@
                         <p class="text-xs text-indigo-200">Admin</p>
                     </div>
                 </div>
-                <form method="POST" action="{{ route('logout') }}">
-                    @csrf
-                    <button type="submit" class="w-full flex items-center px-4 py-2 text-indigo-100 hover:bg-indigo-600 rounded-lg transition-all duration-200">
-                        <i class="fas fa-sign-out-alt mr-3"></i>
-                        <span>Logout</span>
-                    </button>
-                </form>
+                <button @click="showLogoutModal = true" class="w-full flex items-center px-4 py-2 text-indigo-100 hover:bg-indigo-600 rounded-lg transition-all duration-200">
+                    <i class="fas fa-sign-out-alt mr-3"></i>
+                    <span>Logout</span>
+                </button>
             </div>
         </div>
     </aside>
+
+    <!-- Logout Confirmation Modal -->
+    <div x-show="showLogoutModal" 
+         x-transition:enter="transition-opacity ease-linear duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition-opacity ease-linear duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div class="bg-white rounded-lg shadow-xl overflow-hidden w-full max-w-md mx-4"
+             @click.away="showLogoutModal = false">
+            <div class="p-6">
+                <div class="flex items-center justify-center mb-4">
+                    <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                        <i class="fas fa-exclamation text-red-600 text-xl"></i>
+                    </div>
+                </div>
+                <h3 class="text-lg font-medium text-center text-gray-900 mb-2">Konfirmasi Logout</h3>
+                <p class="text-sm text-gray-500 text-center mb-6">Apakah Anda yakin ingin keluar dari admin panel?</p>
+                
+                <div class="flex justify-center space-x-4">
+                    <button @click="showLogoutModal = false" 
+                            class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Batal
+                    </button>
+                    <form method="POST" action="{{ route('logout') }}">
+                        @csrf
+                        <button type="submit" 
+                                class="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                            Ya, Logout
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Main Content -->
     <div class="lg:ml-64">

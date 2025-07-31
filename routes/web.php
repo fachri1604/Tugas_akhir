@@ -13,6 +13,12 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 
 
+
+
+Route::get('/admin/pengguna', [UserController::class, 'index'])->name('admin.pengguna');
+Route::patch('/admin/pengguna/{id}', [UserController::class, 'update'])->name('admin.pengguna.update');
+Route::delete('/admin/pengguna/{id}', [UserController::class, 'destroy'])->name('admin.pengguna.destroy');
+
 Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [LoginController::class, 'login']);
 Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
@@ -28,9 +34,9 @@ Route::get('/', function () {
 //     Route::get('/pengguna/{id}/edit', [UserController::class, 'edit'])->name('pengguna.edit');
 //     Route::delete('/pengguna/{id}', [UserController::class, 'destroy'])->name('pengguna.destroy');
 // });
-Route::get('/admin/pengguna', function () {
-    return view('admin.pengguna');
-})->name('admin.pengguna');
+// Route::get('/admin/pengguna', function () {
+//     return view('admin.pengguna');
+// })->name('admin.pengguna');
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/admin/dashboard', function () {

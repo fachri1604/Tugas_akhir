@@ -8,10 +8,20 @@ use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
 {
-    public function index()
-    {
-        return User::all();
+   public function index(Request $request)
+{
+    $users = User::where('role', '!=', 'Admin')->get(); // hanya ambil non-admin
+
+    $editUser = null;
+    if ($request->has('edit_id')) {
+        $editUser = User::find($request->edit_id);
     }
+
+    return view('admin.pengguna', compact('users', 'editUser'));
+}
+
+
+
 
     public function store(Request $request)
     {

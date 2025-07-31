@@ -14,7 +14,7 @@ class User extends Authenticatable
     protected $keyType = 'int';
 
     protected $fillable = [
-        'name', 'email', 'password', 'alamat','phone',
+        'name', 'email', 'password', 'alamat','phone',  'role',
     ];
 
     protected $hidden = [
