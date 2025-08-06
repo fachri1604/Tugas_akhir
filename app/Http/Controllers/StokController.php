@@ -2,79 +2,103 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\Request;
 use App\Models\Stok;
 use App\Models\Produk;
-use App\Models\User;
-use Illuminate\Http\Request;
 
 class StokController extends Controller
 {
-    /**
-     * Menampilkan semua data stok
-     */
+    // Menampilkan form tambah stok
+    public function create()
+    {
+        $produks = Produk::all();
+        $warnaList = Produk::pluck('warna')->toArray();
+        $ukuranList = Produk::pluck('ukuran_tersedia')->toArray();
+
+        // Gabungkan semua string jadi satu, lalu explode, lalu unique dan sortir
+        $warnas = collect($warnaList)
+            ->flatMap(function ($item) {
+                return array_map('trim', explode(',', $item));
+            })
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+
+        $ukurans = collect($ukuranList)
+            ->flatMap(function ($item) {
+                return array_map('trim', explode(',', $item));
+            })
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+
+
+
+        return view('admin.formstok', compact('produks', 'warnas', 'ukurans'));
+    }
+    public function getKombinasi($id)
+{
+    $produk = Produk::findOrFail($id);
+
+    // Misalnya warnas dan ukurans disimpan dalam JSON di kolom produk
+    $warnas = json_decode($produk->warna, true);    // Contoh: ["Merah", "Biru"]
+    $ukurans = json_decode($produk->ukuran_tersedia, true);  // Contoh: ["S", "M", "L"]
+
+    return response()->json([
+        'warnas' => $warnas,
+        'ukurans' => $ukurans,
+    ]);
+}
+
+
+
+    // Menampilkan daftar stok
     public function index()
     {
-        $stoks = Stok::with(['produk', 'user'])->get();
-        return response()->json($stoks);
+        $stoks = Stok::with('produk')->latest()->paginate(10);
+        return view('admin.stok', compact('stoks'));
     }
 
-    /**
-     * Menyimpan data stok baru
-     */
+    // Mendapatkan data produk (ukuran dan warna) via AJAX
+    public function getProdukData($id)
+    {
+        $produk = Produk::findOrFail($id);
+
+        return response()->json([
+            'ukuran' => $produk->ukuran ?? '',
+            'warna' => $produk->warna ?? ''
+        ]);
+    }
+
+    // Menyimpan stok baru
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'id_produk' => 'required|exists:produks,id_produk',
-            'id_user' => 'required|exists:users,id_user',
+        $request->validate([
+            'produk_id' => 'required|exists:produks,id',
+            'kombinasi' => 'required|array|min:1',
+            'kombinasi.*.warna' => 'required|string',
+            'kombinasi.*.ukuran' => 'required|string',
+            'kombinasi.*.jumlah' => 'required|integer|min:1',
             'tipe' => 'required|in:tambah,kurang',
-            'jumlah' => 'required|integer',
-            'catatan' => 'nullable|string',
-            'total' => 'required|integer',
+            'catatan' => 'nullable|string|max:255',
+            'alamat' => 'nullable|string|max:255',
         ]);
 
-        $stok = Stok::create($validated);
 
-        return response()->json(['message' => 'Stok berhasil ditambahkan', 'data' => $stok]);
-    }
+        foreach ($request->kombinasi as $item) {
+            Stok::create([
+                'produk_id' => $request->produk_id,
+                'warna' => $item['warna'],
+                'ukuran' => $item['ukuran'],
+                'jumlah' => $item['jumlah'],
+                'tipe' => $request->tipe,
+                'catatan' => $request->catatan,
+                'alamat' => $request->alamat,
+            ]);
+        }
 
-    /**
-     * Menampilkan detail stok
-     */
-    public function show($id)
-    {
-        $stok = Stok::with(['produk', 'user'])->findOrFail($id);
-        return response()->json($stok);
-    }
-
-    /**
-     * Mengupdate stok
-     */
-    public function update(Request $request, $id)
-    {
-        $stok = Stok::findOrFail($id);
-
-        $validated = $request->validate([
-            'id_produk' => 'required|exists:produks,id_produk',
-            'id_user' => 'required|exists:users,id_user',
-            'tipe' => 'required|in:tambah,kurang',
-            'jumlah' => 'required|integer',
-            'catatan' => 'nullable|string',
-            'total' => 'required|integer',
-        ]);
-
-        $stok->update($validated);
-
-        return response()->json(['message' => 'Stok berhasil diupdate', 'data' => $stok]);
-    }
-
-    /**
-     * Menghapus stok
-     */
-    public function destroy($id)
-    {
-        $stok = Stok::findOrFail($id);
-        $stok->delete();
-
-        return response()->json(['message' => 'Stok berhasil dihapus']);
+        return redirect()->back()->with('success', 'Stok berhasil ditambahkan!');
     }
 }

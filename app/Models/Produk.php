@@ -38,7 +38,8 @@ public function kategori()
 
     // Relasi one-to-many ke Stok
     public function stoks()
-    {
-        return $this->hasMany(Stok::class);
-    }
+{
+    return $this->hasMany(Stok::class, 'id_produk'); // pastikan foreign key cocok!
+}
+
 }

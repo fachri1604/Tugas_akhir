@@ -13,7 +13,8 @@ class AdminSeeder extends Seeder
         User::create([
             'name' => 'Admin',
             'email' => 'wefashion@gmail.com',
-            'password' => Hash::make('adminpassword'),              
+            'password' => Hash::make('adminpassword'),     
+            'role'     => 'Admin',         
         ]);
     }
 }

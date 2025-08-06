@@ -11,21 +11,21 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('produks', function (Blueprint $table) {    
-    $table->bigIncrements('id_produk');
-    $table->string('nama_produk');
-    $table->text('deskripsi');
-    $table->integer('harga');
-    $table->string('gambar_produk');
-    $table->string('warna');
-    $table->string('ukuran_tersedia');
-    $table->unsignedBigInteger('kategori_id'); 
-    $table->foreign('kategori_id')
-          ->references('id')
-          ->on('kategoris')
-          ->onDelete('cascade');
-    $table->timestamps();
-});
+        Schema::create('produks', function (Blueprint $table) {
+            $table->bigIncrements('id_produk');
+            $table->string('nama_produk');
+            $table->text('deskripsi');
+            $table->integer('harga');
+            $table->string('gambar_produk');
+            $table->string('warna');
+            $table->string('ukuran_tersedia');
+            $table->unsignedBigInteger('kategori_id');
+            $table->foreign('kategori_id')
+                ->references('id')
+                ->on('kategoris')
+                ->onDelete('cascade');
+            $table->timestamps();
+        });
     }
 
     /**

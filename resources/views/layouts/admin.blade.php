@@ -65,6 +65,14 @@
                         </a>
                     </li>
                     <li>
+    <a href="{{ route('admin.stok') }}" 
+       class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
+              {{ request()->routeIs('admin.stok*') ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50' }}">
+        <i class="fas fa-boxes mr-3"></i>
+        <span>Stok</span>
+    </a>
+</li>
+                    <li>
                         <a href="{{ route('admin.pengguna') }}" 
                            class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
                                   {{ request()->routeIs('admin.pengguna*') ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50' }}">
@@ -109,7 +117,7 @@
         </div>
     </aside>
 
-    <!-- Logout Confirmation Modal -->
+    <!-- Logout Modal -->
     <div x-show="showLogoutModal" 
          x-transition:enter="transition-opacity ease-linear duration-200"
          x-transition:enter-start="opacity-0"
@@ -117,7 +125,8 @@
          x-transition:leave="transition-opacity ease-linear duration-200"
          x-transition:leave-start="opacity-100"
          x-transition:leave-end="opacity-0"
-         class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+         x-cloak>
         <div class="bg-white rounded-lg shadow-xl overflow-hidden w-full max-w-md mx-4"
              @click.away="showLogoutModal = false">
             <div class="p-6">

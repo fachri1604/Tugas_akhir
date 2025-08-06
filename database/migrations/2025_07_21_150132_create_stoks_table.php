@@ -12,15 +12,15 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('stoks', function (Blueprint $table) {
-        $table->id('id_log');
+        $table->bigIncrements('id_log');
         $table->unsignedBigInteger('id_produk'); 
-        $table->foreign('id_produk')->references('id_produk')->on('produks')->onDelete('cascade');
-        $table->unsignedBigInteger('id_user');
-        $table->foreign('id_user')->references('id_user')->on('users')->onDelete('cascade');
+         $table->string('ukuran'); // per ukuran
+        $table->string('warna'); 
+        $table->foreign('id_produk')->references('id_produk')->on('produks')->onDelete('cascade');           
         $table->enum('tipe', ['tambah', 'kurang']);
         $table->integer('jumlah');
-        $table->text('catatan');
-        $table->integer('total');
+        $table->text('alamat');
+        $table->text('catatan');            
         $table->timestamps();
     });
     }

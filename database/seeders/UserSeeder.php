@@ -16,6 +16,7 @@ class UserSeeder extends Seeder
             'password' => Hash::make('password123'),
             'alamat' => 'Jl. Contoh No. 123',
             'phone' => '08123456789',
+            'role' => 'User',
         ]);
     }
 }
