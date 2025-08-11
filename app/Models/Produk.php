@@ -26,6 +26,8 @@ class Produk extends Model
         'harga',
         'gambar_produk',
         'warna',
+        'alamat',
+        'stok',
         'ukuran_tersedia',
         'kategori_id',
     ];
@@ -36,10 +38,6 @@ public function kategori()
 }
 
 
-    // Relasi one-to-many ke Stok
-    public function stoks()
-{
-    return $this->hasMany(Stok::class, 'id_produk'); // pastikan foreign key cocok!
-}
+    
 
 }

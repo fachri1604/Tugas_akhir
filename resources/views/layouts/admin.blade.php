@@ -65,12 +65,6 @@
                         </a>
                     </li>
                     <li>
-    <a href="{{ route('admin.stok') }}" 
-       class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
-              {{ request()->routeIs('admin.stok*') ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50' }}">
-        <i class="fas fa-boxes mr-3"></i>
-        <span>Stok</span>
-    </a>
 </li>
                     <li>
                         <a href="{{ route('admin.pengguna') }}" 
@@ -89,11 +83,15 @@
                         </a>
                     </li>
                     <li>
-                        <a href="#" 
-                           class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50">
-                            <i class="fas fa-shopping-cart mr-3"></i>
-                            <span>Pesanan</span>
-                        </a>
+                        <li>
+    <a href="{{ route('admin.pesanan') }}" 
+       class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
+              {{ request()->routeIs('admin.pesanan') ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50' }}">
+        <i class="fas fa-shopping-cart mr-3"></i>
+        <span>Pesanan</span>
+    </a>
+</li>
+
                     </li>
                 </ul>
             </nav>

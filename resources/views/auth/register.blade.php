@@ -2,6 +2,15 @@
 @extends('layouts.app')
 
 @section('content')
+@if ($errors->any())
+    <div class="mb-4 text-red-500">
+        <ul>
+            @foreach ($errors->all() as $error)
+                <li>{{ $error }}</li>
+            @endforeach
+        </ul>
+    </div>
+@endif
 <div class="bg-gradient-to-b from-pink-100 to-white text-center flex flex-col justify-center py-12 sm:px-6 lg:px-8">
     <div class="sm:mx-auto sm:w-full sm:max-w-md">
         <h1 class="text-center text-3xl font-playfair font-bold text-pink-500">

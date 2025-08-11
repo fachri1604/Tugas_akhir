@@ -11,8 +11,15 @@ use App\Http\Controllers\UlasanProdukController;
 use App\Http\Controllers\PembayaranController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Http\Controllers\CartController;
+use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PesananController;
 
 
+
+Route::get('/produk2', function () {
+    return view('produk2');
+})->name('produk2.index');
 
 
 
@@ -26,24 +33,32 @@ Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 Route::get('/register', [RegisteredUserController::class, 'create'])->name('register');
 Route::post('/register', [RegisteredUserController::class, 'store']);
 
+
 Route::get('/', function () {
     return view('home'); // Pastikan file home.blade.php ada di resources/views/
 })->name('home');
 
-// Route untuk manajemen stok
-// Route untuk manajemen stok
-Route::get('/admin/stok', [StokController::class, 'index'])->name('admin.stok'); // tampilkan daftar stok
-Route::get('/admin/stok/create', [StokController::class, 'create'])->name('admin.stok.create'); // form tambah
-Route::post('/admin/stok', [StokController::class, 'store'])->name('admin.stok.store'); // tambah
-Route::get('/admin/stok/{id}/edit', [StokController::class, 'edit'])->name('admin.stok.edit'); // form edit
-Route::put('/admin/stok/{id}', [StokController::class, 'update'])->name('admin.stok.update'); // update
-Route::delete('/admin/stok/{id}', [StokController::class, 'destroy'])->name('admin.stok.destroy'); // hapus;
-Route::get('/produk-data/{id}', [ProdukController::class, 'getDetail']);
-// routes/web.php
-Route::get('/produk/{id}/kombinasi', [ProdukController::class, 'getKombinasi']);
 
 
 
+Route::middleware(['auth'])->group(function () {
+    Route::get('/cart', [CartController::class, 'index'])->name('cart.index');
+    Route::post('/cart/add/{id_produk}', [CartController::class, 'add'])->name('cart.add');
+    Route::put('/cart/update/{id_detail}', [CartController::class, 'update'])->name('cart.update');
+    Route::delete('/cart/remove/{id_detail}', [CartController::class, 'remove'])->name('cart.remove');
+    Route::get('/checkout', [CartController::class, 'checkout'])->name('cart.checkout');
+
+    // Payment show by order_id
+    Route::get('/payment/{order_id}', [PaymentController::class, 'show'])->name('payment.show');
+});
+
+// Midtrans Notification
+Route::post('/payment/notification', [PaymentController::class, 'notificationHandler'])->name('payment.notification');
+
+// Midtrans Redirect
+Route::get('/payment/success/{order_id}', [PaymentController::class, 'paymentSuccess'])->name('payment.success');
+Route::get('/payment/unfinish/{order_id}', [PaymentController::class, 'paymentUnfinish'])->name('payment.unfinish');
+Route::get('/payment/error/{order_id}', [PaymentController::class, 'paymentError'])->name('payment.error');
 
 
 
@@ -67,7 +82,9 @@ Route::get('/admin/produk/edit/{id}', [ProdukController::class, 'edit'])->name('
 Route::put('/admin/update-produk/{id}', [ProdukController::class, 'update'])->name('admin.updateproduk');
 Route::delete('/admin/produk/delete/{id}', [ProdukController::class, 'destroy'])->name('admin.deleteproduk');
 
-
+Route::get('/katalog', [ProdukController::class, 'katalog'])->name('katalog');
+Route::post('/beli/{id}', [ProdukController::class, 'beli'])->name('beli.produk');
+Route::get('/produk/beli/{id}', [ProdukController::class, 'beli'])->name('produk.beli');
 
 
 Route::get('admin/kategori', [KategoriController::class, 'index'])->name('admin.kategori');
@@ -77,16 +94,21 @@ Route::get('/admin/kategori/edit/{id}', [KategoriController::class, 'edit'])->na
 Route::put('admin/kategori/{id}', [KategoriController::class, 'update'])->name('admin.updatekategori');
 Route::delete('admin/kategori/{id}', [KategoriController::class, 'destroy'])->name('admin.deletekategori');
 
+Route::get('admin/pesanan', [PesananController::class, 'index'])->name('admin.pesanan');
 Route::get('/dashboard', function () {
     return view('dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
+// routes/web.php
+
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
 });
 
 require __DIR__.'/auth.php';
 
 
+Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

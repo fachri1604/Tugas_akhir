@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\DetailPesanan;
+use App\Models\Produk;
 use Illuminate\Http\Request;
 
 class DetailPesananController extends Controller
@@ -17,12 +18,24 @@ class DetailPesananController extends Controller
     {
         $validated = $request->validate([
             'id_pesanan' => 'required|exists:pesanans,id_pesanan',
-            'id_produk' => 'required|exists:produks,id_produk',
-            'jumlah' => 'required|integer|min:1',
-            'subtotal' => 'required|integer|min:0',
+            'id_produk'  => 'required|exists:produks,id_produk',
+            'jumlah'     => 'required|integer|min:1',
         ]);
 
-        $detail = DetailPesanan::create($validated);
+        // Ambil data produk untuk harga satuan
+        $produk = Produk::findOrFail($validated['id_produk']);
+
+        // Hitung subtotal
+        $hargaSatuan = $produk->harga;
+        $subtotal    = $hargaSatuan * $validated['jumlah'];
+
+        $detail = DetailPesanan::create([
+            'id_pesanan'   => $validated['id_pesanan'],
+            'id_produk'    => $validated['id_produk'],
+            'jumlah'       => $validated['jumlah'],
+            'harga_satuan' => $hargaSatuan,
+            'subtotal'     => $subtotal
+        ]);
 
         return response()->json($detail, 201);
     }
@@ -39,10 +52,15 @@ class DetailPesananController extends Controller
 
         $validated = $request->validate([
             'jumlah' => 'sometimes|integer|min:1',
-            'subtotal' => 'sometimes|integer|min:0',
         ]);
 
-        $detail->update($validated);
+        // Kalau jumlah diubah, update subtotal
+        if (isset($validated['jumlah'])) {
+            $detail->jumlah = $validated['jumlah'];
+            $detail->subtotal = $detail->harga_satuan * $validated['jumlah'];
+        }
+
+        $detail->save();
 
         return response()->json($detail);
     }

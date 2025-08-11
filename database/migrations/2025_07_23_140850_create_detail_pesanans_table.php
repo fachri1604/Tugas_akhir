@@ -12,9 +12,11 @@ return new class extends Migration
             $table->id('id_detail');
             $table->unsignedBigInteger('id_pesanan');
             $table->unsignedBigInteger('id_produk');
+            $table->decimal('harga_satuan', 12, 2);
             $table->integer('jumlah');
             $table->decimal('subtotal', 12, 2);
             $table->timestamps();
+            $table->decimal('harga_satuan', 12, 2);
 
             // Asumsikan tabel 'pesanans' dan 'produks' sudah ada
             $table->foreign('id_pesanan')->references('id_pesanan')->on('pesanans')->onDelete('cascade');

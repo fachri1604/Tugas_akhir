@@ -23,26 +23,35 @@ class AuthenticatedSessionController extends Controller
      * Handle an incoming authentication request.
      */
     public function store(Request $request): RedirectResponse
-    {
-        $credentials = $request->validate([
-            'email' => ['required', 'email'],
-            'password' => ['required'],
-        ]);
+{
+    $credentials = $request->validate([
+        'email' => ['required', 'email'],
+        'password' => ['required'],
+    ]);
 
-        if (Auth::attempt($credentials)) {
-            $request->session()->regenerate();
+    if (Auth::attempt($credentials)) {
+        $request->session()->regenerate();
 
-            if (Auth::user()->email === 'wefashion@gmail.com') {
-                return redirect()->route('admin.dashboard');
-            }
+        $user = Auth::user();
 
-            return redirect()->intended(RouteServiceProvider::HOME);
+        // Kalau login dari redirect (misal klik tombol beli), 
+        // kembalikan ke URL sebelumnya
+        if ($user->role === 'Admin') {
+            return redirect()->intended(route('admin.dashboard'));
         }
 
-        return back()->withErrors([
-            'email' => 'Email atau password salah.',
-        ])->onlyInput('email');
+        if ($user->role === 'User') {
+            return redirect()->intended(route('katalog'));
+        }
+
+        return redirect()->intended(route('home'));
     }
+
+    return back()->withErrors([
+        'email' => 'Email atau password salah.',
+    ])->onlyInput('email');
+}
+
 
 
 

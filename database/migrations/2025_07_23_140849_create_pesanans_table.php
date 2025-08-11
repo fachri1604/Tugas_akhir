@@ -11,11 +11,8 @@ return new class extends Migration
         Schema::create('pesanans', function (Blueprint $table) {
             $table->id('id_pesanan'); // Primary key auto-increment
 
-            // Kolom foreign key            
-
-            // Kolom lainnya
             $table->decimal('total_harga', 12, 2);
-            $table->enum('status', ['pending', 'diproses', 'selesai', 'dibatalkan'])->default('pending');
+            $table->enum('status', ['pending', 'failed', 'success'])->default('pending');
             $table->timestamps();
 
             // Foreign key ke users
