@@ -14,14 +14,22 @@ use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PesananController;
-
+use App\Http\Controllers\RajaOngkirController;
+use App\Models\Produk; 
+use App\Http\Controllers\DashboardController;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken as FrameworkCsrf; 
 
 
 Route::get('/produk2', function () {
     return view('produk2');
 })->name('produk2.index');
 
-
+Route::get('/', function () {
+    $products = Produk::orderBy('id_produk', 'desc')
+        ->take(6)
+        ->get(['id_produk','nama_produk','gambar_produk']); // ambil kolom yang dipakai di view
+    return view('home', compact('products'));
+})->name('home');
 
 Route::get('/admin/pengguna', [UserController::class, 'index'])->name('admin.pengguna');
 Route::patch('/admin/pengguna/{id}', [UserController::class, 'update'])->name('admin.pengguna.update');
@@ -34,9 +42,9 @@ Route::get('/register', [RegisteredUserController::class, 'create'])->name('regi
 Route::post('/register', [RegisteredUserController::class, 'store']);
 
 
-Route::get('/', function () {
-    return view('home'); // Pastikan file home.blade.php ada di resources/views/
-})->name('home');
+// Route::get('/', function () {
+//     return view('home'); // Pastikan file home.blade.php ada di resources/views/
+// })->name('home');
 
 
 
@@ -47,29 +55,58 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/cart/update/{id_detail}', [CartController::class, 'update'])->name('cart.update');
     Route::delete('/cart/remove/{id_detail}', [CartController::class, 'remove'])->name('cart.remove');
     Route::get('/checkout', [CartController::class, 'checkout'])->name('cart.checkout');
+    
+    // Route::post('/available-couriers', [CartController::class, 'getAvailableCouriers'])->name('cart.available-couriers');
 
+     // Form checkout manual + ongkir
+    Route::get('/checkout/{id_pesanan}', [CartController::class, 'checkoutForm'])->name('checkout.form');
+    Route::post('/checkout/{id_pesanan}', [CartController::class, 'checkoutProcess'])->name('checkout.process');
+    
     // Payment show by order_id
     Route::get('/payment/{order_id}', [PaymentController::class, 'show'])->name('payment.show');
 });
+// RajaOngkir API Routes
+Route::get('/provinces', [RajaOngkirController::class, 'getProvinces'])->name('rajaongkir.provinces');
+Route::get('/cities/{province_id}', [RajaOngkirController::class, 'getCities'])->name('rajaongkir.cities');
+Route::get('/districts/{city_id}', [RajaOngkirController::class, 'getDistricts'])
+    ->name('rajaongkir.districts');
+Route::prefix('ongkir')->name('rajaongkir.')->group(function () {
+    Route::post('/cost', [RajaOngkirController::class, 'getCost'])->name('cost');
+});
+
+
+
 
 // Midtrans Notification
-Route::post('/payment/notification', [PaymentController::class, 'notificationHandler'])->name('payment.notification');
+
+Route::post('/payment/notification', [PaymentController::class, 'notificationHandler'])
+    ->name('payment.notification')
+    ->withoutMiddleware([FrameworkCsrf::class]);
 
 // Midtrans Redirect
 Route::get('/payment/success/{order_id}', [PaymentController::class, 'paymentSuccess'])->name('payment.success');
 Route::get('/payment/unfinish/{order_id}', [PaymentController::class, 'paymentUnfinish'])->name('payment.unfinish');
 Route::get('/payment/error/{order_id}', [PaymentController::class, 'paymentError'])->name('payment.error');
+ // webhook Midtrans (server -> server)
 
+// dipanggil dari JS onSuccess (client -> server)
+Route::post('/payment/confirm', [PaymentController::class, 'confirmFromClient'])
+    ->name('payment.confirm');
+
+// (opsional, jika masih pakai halaman show/payment lama)
 
 
 
 
 
 Route::middleware(['auth'])->group(function () {
-    Route::get('/admin/dashboard', function () {
-        return view('admin.dashboard');
-    })->name('admin.dashboard');
+    Route::get('/admin/dashboard', [DashboardController::class, 'index'])
+        ->name('admin.dashboard');
 });
+
+
+
+
 
 
 Route::get('/produk/create', [ProdukController::class, 'create'])->name('produk.create');
@@ -99,7 +136,9 @@ Route::get('/dashboard', function () {
     return view('dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
-// routes/web.php
+// Route::get('/provinces', [RajaOngkirController::class, 'getProvinces']);
+// Route::get('/cities/{province_id}', [RajaOngkirController::class, 'getCities']);
+// Route::post('/cost', [RajaOngkirController::class, 'getCost']);
 
 
 Route::middleware('auth')->group(function () {

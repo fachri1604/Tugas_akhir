@@ -17,7 +17,10 @@ class User extends Authenticatable
         'name', 
         'email', 
         'password', 
-        'alamat',
+        'alamat',       
+        'provinsi_id',  
+        'kota_id',      
+        'kode_pos', 
         'phone',  
         'role',
     ];

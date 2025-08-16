@@ -26,12 +26,15 @@ class UserController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'name'     => 'required',
-            'email'    => 'required|email|unique:users,email',
-            'password' => 'required|min:6',
-            'alamat'   => 'nullable|string',
-            'phone'    => 'nullable|string',
-            'role'     => 'required|string'
+           'name'        => $request->name,
+    'email'       => $request->email,
+    'password'    => Hash::make($request->password),
+    'alamat'      => $request->alamat,
+    'provinsi_id' => $request->provinsi_id,
+    'kota_id'     => $request->kota_id,
+    'kode_pos'    => $request->kode_pos,
+    'phone'       => $request->phone,
+    'role'        => $request->role
         ]);
 
         $user = User::create([
@@ -59,11 +62,15 @@ class UserController extends Controller
         $user = User::where('id_user', $id_user)->firstOrFail();
 
         $request->validate([
-            'name' => 'required',
-            'email' => 'required|email|unique:users,email,'.$id_user.',id_user',
-            'alamat' => 'nullable',
-            'phone' => 'nullable',
-            'role' => 'required'
+             'name'        => 'required',
+    'email'       => 'required|email|unique:users,email' . (isset($id_user) ? ',' . $id_user . ',id_user' : ''),
+    'password'    => isset($id_user) ? 'nullable|min:6' : 'required|min:6',
+    'alamat'      => 'nullable|string|max:255',
+    'provinsi_id' => 'nullable|integer',
+    'kota_id'     => 'nullable|integer',
+    'kode_pos'    => 'nullable|string|max:10',
+    'phone'       => 'nullable|string|max:20',
+    'role'        => 'required|string'
         ]);
 
         $user->update($request->all());

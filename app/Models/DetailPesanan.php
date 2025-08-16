@@ -19,6 +19,8 @@ class DetailPesanan extends Model
         'id_produk',
         'jumlah',
         'harga_satuan',
+        'ukuran',
+        'warna',
         'subtotal',
     ];
 

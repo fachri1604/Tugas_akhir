@@ -6,19 +6,22 @@
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
     @vite('resources/css/app.css')
 </head>
-<body class="font-playfair antialiased">
-    
 
-    {{-- Navbar dipanggil di sini --}}
+{{-- Jadikan halaman full-height & kolom --}}
+<body class="min-h-screen flex flex-col font-playfair antialiased">
+
+    {{-- Navbar --}}
     @include('components.navbar')
 
-    {{-- Konten utama tiap halaman --}}
-    <main>
+    {{-- Konten utama mendorong footer ke bawah --}}
+    <main class="flex-1">
         @yield('content')
     </main>
 
-    {{-- Footer dipanggil di sini --}}
-    @include('components.footer')
+    {{-- Footer (jangan fixed/absolute) --}}
+    <footer class="mt-auto">
+        @include('components.footer')
+    </footer>
 
 </body>
 </html>

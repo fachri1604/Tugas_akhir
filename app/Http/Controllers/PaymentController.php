@@ -4,73 +4,181 @@ namespace App\Http\Controllers;
 
 use App\Models\Pesanan;
 use Illuminate\Http\Request;
-use Midtrans\Notification;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Midtrans\Config;
-use Midtrans\Snap;
+use Midtrans\Notification;
+use Midtrans\Transaction;
 
 class PaymentController extends Controller
 {
     public function __construct()
     {
-        // Konfigurasi Midtrans sekali saja
-        Config::$serverKey = config('midtrans.server_key');
-        Config::$isProduction = config('midtrans.is_production'); // false kalau sandbox
-        Config::$isSanitized = true;
-        Config::$is3ds = true;
+        Config::$serverKey    = (string) config('midtrans.server_key');
+        Config::$isProduction = (bool)   config('midtrans.is_production'); // sandbox=false
+        Config::$isSanitized  = true;
+        Config::$is3ds        = true;
     }
 
-    // =========================
-    // 1. HANDLE NOTIFIKASI MIDTRANS
-    // =========================
+    /**
+     * Webhook Midtrans (server -> server).
+     */
     public function notificationHandler(Request $request)
     {
-        $notification = new Notification();
+        try {
+            $notif = new Notification();
 
-        $midtransOrderId = $notification->order_id; // order_id unik dari midtrans
-        $transaction_status = $notification->transaction_status;
-        $fraud_status = $notification->fraud_status;
+            $orderId    = (string) ($notif->order_id ?? '');
+            $trxStatus  = (string) ($notif->transaction_status ?? 'pending');
+            $fraud      = (string) ($notif->fraud_status ?? '');
+            $trxId      = (string) ($notif->transaction_id ?? '');
+            $payType    = (string) ($notif->payment_type ?? '');
+            $gross      = (string) ($notif->gross_amount ?? '');
 
-        // Cari pesanan berdasarkan midtrans_order_id
-        $pesanan = Pesanan::with('detailPesanans.produk')->where('midtrans_order_id', $midtransOrderId)->first();
-
-        if ($pesanan) {
-            if ($transaction_status == 'capture' || $transaction_status == 'settlement') {
-                if ($fraud_status == 'challenge') {
-                    $pesanan->status = 'pending';
-                } else {
-                    // Cek apakah sebelumnya status belum success untuk mencegah pengurangan stok berkali-kali
-                    if ($pesanan->status !== 'success') {
-                        $pesanan->status = 'success';
-
-                        // Kurangi stok produk hanya sekali saat sukses
-                        foreach ($pesanan->detailPesanans as $detail) {
-                            $produk = $detail->produk;
-                            $produk->stok = max(0, $produk->stok - $detail->jumlah);
-                            $produk->save();
-                        }
-                    }
-                }
-            } elseif ($transaction_status == 'pending') {
-                $pesanan->status = 'pending';
-            } elseif (in_array($transaction_status, ['deny', 'expire', 'cancel'])) {
-                $pesanan->status = 'failed';
+            if ($orderId === '') {
+                $payload   = $request->all();
+                $orderId   = (string) ($payload['order_id'] ?? '');
+                $trxStatus = (string) ($payload['transaction_status'] ?? $trxStatus);
+                $fraud     = (string) ($payload['fraud_status'] ?? $fraud);
+                $trxId     = (string) ($payload['transaction_id'] ?? $trxId);
+                $payType   = (string) ($payload['payment_type'] ?? $payType);
+                $gross     = (string) ($payload['gross_amount'] ?? $gross);
             }
 
-            $pesanan->save();
-        }
+            if ($orderId === '') {
+                return response()->json(['ok' => false, 'message' => 'order_id kosong'], 400);
+            }
 
-        return response()->json(['status' => 'ok']);
+            Log::info('[Midtrans][notif] masuk', compact('orderId','trxStatus','fraud','trxId','payType','gross'));
+
+            $pesanan = Pesanan::with('detailPesanans.produk')->where('id_pesanan', $orderId)->first();
+            if (!$pesanan) {
+                return response()->json(['ok' => false, 'message' => 'Pesanan tidak ditemukan'], 404);
+            }
+
+            // Simpan metadata transaksi
+            if ($this->columnExists('pesanans', 'midtrans_order_id')) {
+                $pesanan->midtrans_order_id = $trxId;
+            }
+            if ($this->columnExists('pesanans', 'payment_type') && $payType) {
+                $pesanan->payment_type = $payType;
+            }
+            if ($this->columnExists('pesanans', 'midtrans_gross_amount') && $gross !== '') {
+                $pesanan->midtrans_gross_amount = $gross;
+            }
+
+            // Map status Midtrans -> status internal
+            if (
+                ($trxStatus === 'capture' && $fraud === 'accept') ||
+                $trxStatus === 'settlement'
+            ) {
+                $this->settleOrder($pesanan); // status = success
+            } elseif ($trxStatus === 'pending' || $fraud === 'challenge') {
+                $pesanan->status = 'pending';
+                $pesanan->save();
+            } else {
+                $pesanan->status = 'failed';
+                $pesanan->save();
+            }
+
+            return response()->json(['ok' => true, 'order_id' => $orderId, 'status' => $pesanan->status], 200);
+        } catch (\Throwable $e) {
+            Log::error('[Midtrans][notif] error: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return response()->json(['ok' => false, 'message' => 'Server error'], 500);
+        }
     }
 
-    // =========================
-    // 2. HALAMAN SUCCESS / UNFINISH / ERROR
-    // =========================
+    public function show($id_pesanan)
+    {
+        $pesanan = Pesanan::findOrFail($id_pesanan);
+
+        $params = [
+            'transaction_details' => [
+                'order_id'     => (string) $pesanan->id_pesanan,
+                'gross_amount' => (int)    $pesanan->total_harga,
+            ],
+        ];
+
+        $snapToken = \Midtrans\Snap::getSnapToken($params);
+        return view('payment', compact('pesanan', 'snapToken'));
+    }
+
+    public function confirmFromClient(Request $request)
+    {
+        $orderId = (string) $request->input('order_id');
+        if ($orderId === '') {
+            return response()->json(['ok' => false, 'message' => 'order_id kosong'], 422);
+        }
+
+        try {
+            $status = Transaction::status($orderId);
+            $st = is_array($status) ? $status : json_decode(json_encode($status), true);
+
+            $trxStatus = (string) ($st['transaction_status'] ?? 'pending');
+            $trxId     = (string) ($st['transaction_id']    ?? '');
+            $payType   = (string) ($st['payment_type']      ?? '');
+            $gross     = (string) ($st['gross_amount']      ?? '');
+
+            $order = Pesanan::with('detailPesanans.produk')->where('id_pesanan', $orderId)->firstOrFail();
+
+            if ($this->columnExists('pesanans', 'midtrans_order_id')) {
+                $order->midtrans_order_id = $trxId;
+            }
+            if ($this->columnExists('pesanans', 'payment_type') && $payType) {
+                $order->payment_type = $payType;
+            }
+            if ($this->columnExists('pesanans', 'midtrans_gross_amount') && $gross !== '') {
+                $order->midtrans_gross_amount = $gross;
+            }
+
+            if (in_array($trxStatus, ['capture','settlement'], true)) {
+                $this->settleOrder($order); // status = success
+            } elseif ($trxStatus === 'pending') {
+                $order->status = 'pending';
+                $order->save();
+            } else {
+                $order->status = 'failed';
+                $order->save();
+            }
+
+            return response()->json(['ok' => true, 'status' => $trxStatus, 'transaction_id' => $trxId]);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'message' => 'Gagal konfirmasi: '.$e->getMessage()], 500);
+        }
+    }
+
+    private function settleOrder(Pesanan $pesanan): void
+    {
+        if ($pesanan->status === 'success') {
+            return; // sudah sukses sebelumnya
+        }
+
+        DB::transaction(function () use ($pesanan) {
+            $pesanan->loadMissing('detailPesanans.produk');
+            foreach ($pesanan->detailPesanans as $d) {
+                if ($d->produk) {
+                    $d->produk->stok = max(0, (int)$d->produk->stok - (int)$d->jumlah);
+                    $d->produk->save();
+                }
+            }
+            $pesanan->status = 'success'; // sesuai enum
+            $pesanan->save();
+        });
+    }
+
+    private function columnExists(string $table, string $column): bool
+    {
+        try {
+            return \Illuminate\Support\Facades\Schema::hasColumn($table, $column);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     public function paymentSuccess($id_pesanan)
     {
         $pesanan = Pesanan::findOrFail($id_pesanan);
-        $pesanan->status = 'success';
-        $pesanan->save();
-
+        $this->settleOrder($pesanan);
         return redirect()->route('payment.show', $id_pesanan);
     }
 
@@ -79,7 +187,6 @@ class PaymentController extends Controller
         $pesanan = Pesanan::findOrFail($id_pesanan);
         $pesanan->status = 'pending';
         $pesanan->save();
-
         return redirect()->route('payment.show', $id_pesanan);
     }
 
@@ -88,51 +195,6 @@ class PaymentController extends Controller
         $pesanan = Pesanan::findOrFail($id_pesanan);
         $pesanan->status = 'failed';
         $pesanan->save();
-
         return redirect()->route('payment.show', $id_pesanan);
-    }
-
-    // =========================
-    // 3. HALAMAN PAYMENT
-    // =========================
-    public function show($id_pesanan)
-    {
-        $pesanan = Pesanan::findOrFail($id_pesanan);
-
-        // Jika belum punya midtrans_order_id, buat dan simpan
-        if (!$pesanan->midtrans_order_id) {
-            $pesanan->midtrans_order_id = $pesanan->id_pesanan . '-' . time();
-            $pesanan->save();
-        }
-
-        // Buat Snap Token Midtrans pakai midtrans_order_id
-        $snapToken = $this->createMidtransTransaction($pesanan);
-
-        return view('payment', compact('pesanan', 'snapToken'));
-    }
-
-    // =========================
-    // 4. FUNGSI BUAT SNAP TOKEN
-    // =========================
-    private function createMidtransTransaction($pesanan)
-    {
-        $params = [
-            'transaction_details' => [
-                'order_id' => $pesanan->midtrans_order_id,
-                'gross_amount' => $pesanan->total_harga,
-            ],
-            'customer_details' => [
-                'first_name' => $pesanan->nama_pelanggan ?? 'Customer',
-                'email'      => $pesanan->email ?? 'customer@example.com',
-                'phone'      => $pesanan->no_hp ?? '08123456789',
-            ],
-            'callbacks' => [
-                'finish' => url("/payment/success/{$pesanan->id_pesanan}"),
-                'unfinish' => url("/payment/unfinish/{$pesanan->id_pesanan}"),
-                'error' => url("/payment/error/{$pesanan->id_pesanan}")
-            ]
-        ];
-
-        return Snap::getSnapToken($params);
     }
 }
