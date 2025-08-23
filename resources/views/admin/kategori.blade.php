@@ -1,118 +1,121 @@
 @extends('layouts.admin')
 
 @section('content')
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" x-data="{
-    deleteCategoryId: null,
-    deleteCategoryName: '',
-    showDeleteModal: false,
-    init() {
-        if (this.showAlert) {
-            setTimeout(() => {
-                this.showAlert = false;
-            }, 5000);
-        }
-    },
-    openDeleteModal(id, name) {
-        this.deleteCategoryId = id;
-        this.deleteCategoryName = name;
-        this.showDeleteModal = true;
-    },
-    closeDeleteModal() {
-        this.showDeleteModal = false;
-    }
-}">
-    <div class="flex justify-between items-center mb-8">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" 
+     x-data="{
+        deleteCategoryId: null,
+        deleteCategoryName: '',
+        showDeleteModal: false,
+        init() {
+            if (this.showAlert) {
+                setTimeout(() => { this.showAlert = false }, 5000);
+            }
+        },
+        openDeleteModal(id, name) {
+            this.deleteCategoryId = id;
+            this.deleteCategoryName = name;
+            this.showDeleteModal = true;
+        },
+        closeDeleteModal() { this.showDeleteModal = false; }
+     }">
+
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <h1 class="text-3xl font-bold text-indigo-700">Daftar Kategori</h1>
-        <a href="{{ route('admin.formkategori') }}" class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 active:bg-indigo-900 focus:outline-none focus:border-indigo-900 focus:ring ring-indigo-300 disabled:opacity-25 transition ease-in-out duration-150">
+
+        {{-- Search --}}
+        {{-- <form method="GET" action="{{ route('admin.kategori') }}" class="flex items-center gap-2">
+            <input type="text" name="q" value="{{ $q ?? request('q') }}" placeholder="Cari kategori…"
+                   class="border rounded-md px-3 py-2 w-56 focus:outline-none focus:ring focus:border-indigo-400">
+            <button class="px-3 py-2 bg-gray-100 rounded hover:bg-gray-200">Cari</button> --}}
+            @if(request('q'))
+                <a href="{{ route('admin.kategori') }}" class="text-sm text-gray-500 hover:underline">Reset</a>
+            @endif
+        </form>
+
+        <a href="{{ route('admin.formkategori') }}" 
+           class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 active:bg-indigo-900 focus:outline-none focus:border-indigo-900 focus:ring ring-indigo-300 disabled:opacity-25 transition ease-in-out duration-150">
             <i class="fas fa-plus mr-2"></i> Tambah Kategori
         </a>
     </div>
 
-    <!-- Alert Notification -->
-    <div x-show="showAlert" x-transition:enter="transition ease-out duration-300" 
-         x-transition:enter-start="opacity-0 translate-y-4"
-         x-transition:enter-end="opacity-100 translate-y-0"
-         x-transition:leave="transition ease-in duration-200"
-         x-transition:leave-start="opacity-100 translate-y-0"
-         x-transition:leave-end="opacity-0 translate-y-4"
-         :class="{
-            'bg-green-100 border-l-4 border-green-500 text-green-700': alertType === 'success',
-            'bg-red-100 border-l-4 border-red-500 text-red-700': alertType === 'error'
-         }"
-         class="mb-6 p-4 rounded">
-        <div class="flex items-center justify-between">
-            <div>
-                <i :class="{
-                    'fas fa-check-circle mr-2': alertType === 'success',
-                    'fas fa-exclamation-circle mr-2': alertType === 'error'
-                }"></i>
-                <span x-text="alertMessage"></span>
-            </div>
-            <button @click="showAlert = false" class="text-gray-500 hover:text-gray-700">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-    </div>
-
-    <!-- Categories Table -->
+    {{-- Tabel --}}
     <div class="bg-white shadow-xl rounded-lg overflow-hidden">
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-indigo-50">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">ID</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">Nama Kategori</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">Aksi</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">
+                            No
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">
+                            Nama Kategori
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">
+                            Aksi
+                        </th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     @forelse($kategoris as $kategori)
-                    <tr class="hover:bg-gray-50 transition-colors">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ $kategori->id }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ $kategori->nama_kategori }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <a href="{{ route('admin.editkategori', $kategori->id) }}" 
-                               class="text-indigo-600 hover:text-indigo-900 mr-3 inline-flex items-center">
-                                <i class="fas fa-edit mr-1"></i> Edit
-                            </a>
-                            <button @click="openDeleteModal('{{ $kategori->id }}', '{{ addslashes($kategori->nama_kategori) }}')" 
-                                    class="text-red-600 hover:text-red-900 inline-flex items-center">
-                                <i class="fas fa-trash-alt mr-1"></i> Hapus
-                            </button>
-                        </td>
-                    </tr>
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            {{-- Ganti ID dengan nomor urut --}}
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {{ $kategoris->firstItem() + $loop->index }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {{ $kategori->nama_kategori }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <a href="{{ route('admin.editkategori', $kategori->id) }}" 
+                                   class="text-indigo-600 hover:text-indigo-900 mr-3 inline-flex items-center">
+                                    <i class="fas fa-edit mr-1"></i> Edit
+                                </a>
+                                <button @click="openDeleteModal('{{ $kategori->id }}', '{{ addslashes($kategori->nama_kategori) }}')"
+                                        class="text-red-600 hover:text-red-900 inline-flex items-center">
+                                    <i class="fas fa-trash-alt mr-1"></i> Hapus
+                                </button>
+                            </td>
+                        </tr>
                     @empty
-                    <tr>
-                        <td colspan="3" class="px-6 py-4 text-center text-sm text-gray-500">
-                            Belum ada kategori
-                        </td>
-                    </tr>
+                        <tr>
+                            <td colspan="3" class="px-6 py-8 text-center text-sm text-gray-500">
+                                Belum ada kategori
+                            </td>
+                        </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
+
+        {{-- Footer Pagination --}}
+        @if($kategoris->hasPages())
+            <div class="px-4 py-3 bg-white border-t border-gray-200">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div class="text-sm text-gray-600">
+                        Menampilkan
+                        <span class="font-medium">{{ $kategoris->firstItem() }}</span>
+                        –
+                        <span class="font-medium">{{ $kategoris->lastItem() }}</span>
+                        dari
+                        <span class="font-medium">{{ $kategoris->total() }}</span>
+                        data
+                    </div>
+                    <div>
+                        {{ $kategoris->onEachSide(1)->links() }}
+                    </div>
+                </div>
+            </div>
+        @endif
     </div>
 
-    <!-- Delete Confirmation Modal -->
+    {{-- Modal Konfirmasi Hapus --}}
     <template x-teleport="body">
         <div x-show="showDeleteModal" 
-             x-transition:enter="transition ease-out duration-300"
-             x-transition:enter-start="opacity-0"
-             x-transition:enter-end="opacity-100"
-             x-transition:leave="transition ease-in duration-200"
-             x-transition:leave-start="opacity-100"
-             x-transition:leave-end="opacity-0"
-             class="fixed inset-0 z-50 overflow-y-auto" 
-             aria-labelledby="modal-title" 
-             role="dialog" 
-             aria-modal="true">
+             class="fixed inset-0 z-50 overflow-y-auto"
+             x-transition>
             <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
-                     aria-hidden="true" 
-                     @click="closeDeleteModal()"></div>
-                
-                <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-                
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeDeleteModal()" aria-hidden="true"></div>
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
                 <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
                     <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                         <div class="sm:flex sm:items-start">
@@ -120,12 +123,11 @@
                                 <i class="fas fa-exclamation-triangle text-red-600"></i>
                             </div>
                             <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                                <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
-                                    Konfirmasi Hapus Kategori
-                                </h3>
+                                <h3 class="text-lg leading-6 font-medium text-gray-900">Konfirmasi Hapus Kategori</h3>
                                 <div class="mt-2">
                                     <p class="text-sm text-gray-500">
-                                        Apakah Anda yakin ingin menghapus kategori <span class="font-semibold" x-text="deleteCategoryName"></span>? Data yang dihapus tidak dapat dikembalikan.
+                                        Apakah Anda yakin ingin menghapus kategori
+                                        <span class="font-semibold" x-text="deleteCategoryName"></span>? Data yang dihapus tidak dapat dikembalikan.
                                     </p>
                                 </div>
                             </div>

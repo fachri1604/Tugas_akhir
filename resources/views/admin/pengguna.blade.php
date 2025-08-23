@@ -1,21 +1,23 @@
 @extends('layouts.admin')
 
 @section('content')
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" x-data="{
-    showDeleteModal: false,
-    deleteUserId: null,
-    deleteUserName: '',
-    openDeleteModal(id, name) {
-        this.deleteUserId = id;
-        this.deleteUserName = name;
-        this.showDeleteModal = true;
-    },
-    closeDeleteModal() {
-        this.showDeleteModal = false;
-        this.deleteUserId = null;
-        this.deleteUserName = '';
-    }
-}">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" 
+     x-data="{
+        showDeleteModal: false,
+        deleteUserId: null,
+        deleteUserName: '',
+        openDeleteModal(id, name) {
+            this.deleteUserId = id;
+            this.deleteUserName = name;
+            this.showDeleteModal = true;
+        },
+        closeDeleteModal() {
+            this.showDeleteModal = false;
+            this.deleteUserId = null;
+            this.deleteUserName = '';
+        }
+     }">
+
     <!-- Notifikasi -->
     @if(session('success'))
         <div class="mb-6 p-4 bg-green-100 border-l-4 border-green-500 text-green-700 rounded">
@@ -55,7 +57,7 @@
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-indigo-50">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">ID</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">No</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">Nama</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">Email</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider">Alamat</th>
@@ -68,7 +70,10 @@
                 <tbody class="bg-white divide-y divide-gray-200">
                     @forelse($users as $user)
                     <tr class="hover:bg-gray-50 transition-colors">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ $user->id_user }}</td>
+                        {{-- Nomor urut, bukan ID --}}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {{ $users->firstItem() + $loop->index }}
+                        </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ $user->name }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ $user->email }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ $user->alamat ?? '-' }}</td>
@@ -79,7 +84,9 @@
                                 {{ $user->role }}
                             </span>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ $user->created_at->format('d/m/Y H:i') }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {{ $user->created_at->format('d/m/Y H:i') }}
+                        </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <a href="{{ route('admin.pengguna', ['edit_id' => $user->id_user]) }}" 
                                class="text-indigo-600 hover:text-indigo-900 mr-3 inline-flex items-center">
@@ -101,28 +108,36 @@
                 </tbody>
             </table>
         </div>
+
+        {{-- Footer Pagination --}}
+        @if($users->hasPages())
+            <div class="px-4 py-3 bg-white border-t border-gray-200">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div class="text-sm text-gray-600">
+                        Menampilkan
+                        <span class="font-medium">{{ $users->firstItem() }}</span>
+                        –
+                        <span class="font-medium">{{ $users->lastItem() }}</span>
+                        dari
+                        <span class="font-medium">{{ $users->total() }}</span>
+                        pengguna
+                    </div>
+                    <div>
+                        {{ $users->onEachSide(1)->links() }}
+                    </div>
+                </div>
+            </div>
+        @endif
     </div>
 
     <!-- Delete Confirmation Modal -->
     <template x-teleport="body">
         <div x-show="showDeleteModal" 
-             x-transition:enter="transition ease-out duration-300"
-             x-transition:enter-start="opacity-0"
-             x-transition:enter-end="opacity-100"
-             x-transition:leave="transition ease-in duration-200"
-             x-transition:leave-start="opacity-100"
-             x-transition:leave-end="opacity-0"
-             class="fixed inset-0 z-50 overflow-y-auto" 
-             aria-labelledby="modal-title" 
-             role="dialog" 
-             aria-modal="true">
+             x-transition
+             class="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
             <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
-                     aria-hidden="true" 
-                     @click="closeDeleteModal()"></div>
-                
-                <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-                
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeDeleteModal()" aria-hidden="true"></div>
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
                 <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
                     <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                         <div class="sm:flex sm:items-start">
@@ -130,9 +145,7 @@
                                 <i class="fas fa-exclamation-triangle text-red-600"></i>
                             </div>
                             <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                                <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
-                                    Konfirmasi Hapus Pengguna
-                                </h3>
+                                <h3 class="text-lg leading-6 font-medium text-gray-900">Konfirmasi Hapus Pengguna</h3>
                                 <div class="mt-2">
                                     <p class="text-sm text-gray-500">
                                         Apakah Anda yakin ingin menghapus pengguna <span class="font-semibold" x-text="deleteUserName"></span>? Data yang dihapus tidak dapat dikembalikan.

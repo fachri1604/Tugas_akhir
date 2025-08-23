@@ -35,7 +35,7 @@
             <!-- Brand Logo -->
             <div class="flex items-center justify-between px-6 py-5 border-b border-indigo-600">
                 <div class="flex items-center space-x-3">
-                    <svg class="w-8 h-8 text-indigo-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <svg class="w-8 h-8 text-indigo-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
                     </svg>
                     <span class="text-xl font-bold">WeFashion</span>
@@ -65,8 +65,6 @@
                         </a>
                     </li>
                     <li>
-</li>
-                    <li>
                         <a href="{{ route('admin.pengguna') }}" 
                            class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
                                   {{ request()->routeIs('admin.pengguna*') ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50' }}">
@@ -83,15 +81,12 @@
                         </a>
                     </li>
                     <li>
-                        <li>
-    <a href="{{ route('admin.pesanan') }}" 
-       class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
-              {{ request()->routeIs('admin.pesanan') ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50' }}">
-        <i class="fas fa-shopping-cart mr-3"></i>
-        <span>Pesanan</span>
-    </a>
-</li>
-
+                        <a href="{{ route('admin.pesanan') }}" 
+                           class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
+                                  {{ request()->routeIs('admin.pesanan') ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50' }}">
+                            <i class="fas fa-shopping-cart mr-3"></i>
+                            <span>Pesanan</span>
+                        </a>
                     </li>
                 </ul>
             </nav>
@@ -163,20 +158,8 @@
                     <i class="fas fa-bars text-xl"></i>
                 </button>
 
-                <!-- Search & Notifications -->
-                <div class="flex-1 flex justify-end items-center space-x-4">
-                    <div class="relative max-w-md w-full lg:block hidden">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <i class="fas fa-search text-gray-400"></i>
-                        </div>
-                        <input type="text" class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Search...">
-                    </div>
-                    
-                    <button class="p-2 text-gray-500 hover:text-gray-700 relative">
-                        <i class="fas fa-bell text-xl"></i>
-                        <span class="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
-                    </button>
-                </div>
+                <!-- (Search & Notifications dihapus) -->
+                <div class="flex-1"></div>
             </div>
         </header>
 

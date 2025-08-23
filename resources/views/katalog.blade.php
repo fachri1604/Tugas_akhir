@@ -12,13 +12,23 @@
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6">
         @foreach($produks as $produk)
         <div class="border rounded-lg shadow p-4 flex flex-col">
-            <img src="{{ asset('storage/' . $produk->gambar_produk) }}" 
-                 alt="{{ $produk->nama_produk }}"
-                 class="h-56 w-full object-cover rounded mb-3"> {{-- lebih tinggi sedikit --}}
 
-            <h3 class="font-semibold text-lg">{{ $produk->nama_produk }}</h3>
-            <p class="text-gray-600 mb-2">Rp {{ number_format($produk->harga, 0, ',', '.') }}</p>
-            <p class="text-sm text-gray-500 flex-grow">{{ Str::limit($produk->deskripsi, 80) }}</p>
+            {{-- Gambar produk --}}
+            <div class="w-full h-56 flex items-center justify-center bg-white rounded mb-3">
+                <img src="{{ asset('storage/' . $produk->gambar_produk) }}" 
+                     alt="{{ $produk->nama_produk }}"                     
+                    class="w-full h-56 object-contain rounded mb-3 bg-white">
+            </div>
+
+            {{-- Nama produk dengan ellipsis --}}
+            <h3 class="font-semibold text-lg truncate w-full block" 
+                title="{{ $produk->nama_produk }}">
+                {{ $produk->nama_produk }}
+            </h3>
+
+            <p class="text-gray-600 mb-3">
+                Rp {{ number_format($produk->harga, 0, ',', '.') }}
+            </p>
 
             <a href="{{ route('produk.beli', $produk->id_produk) }}" 
                class="bg-black text-white px-4 py-2 rounded hover:bg-gray-800 w-full text-center block">

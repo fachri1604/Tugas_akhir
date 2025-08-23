@@ -4,61 +4,95 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Kategori;
+use Illuminate\Validation\Rule;
 
 class KategoriController extends Controller
 {
+    /**
+     * List kategori (10 per halaman) + pencarian opsional ?q=...
+     * Dibuat tanpa parameter agar aman dipanggil dari route closure.
+     */
     public function index()
     {
-        $kategoris = Kategori::all();
-        return view('admin.kategori', compact('kategoris'));
+        $q = trim((string) request('q', ''));
+
+        $kategoris = Kategori::query()
+            ->when($q !== '', function ($query) use ($q) {
+                $query->where('nama_kategori', 'like', "%{$q}%");
+            })
+            ->orderByDesc('id')
+            ->paginate(10)
+            ->withQueryString(); // pertahankan parameter ?q
+
+        return view('admin.kategori', compact('kategoris', 'q'));
     }
 
+    /**
+     * Form create.
+     */
     public function create()
-
     {
-        $kategoris = Kategori::all(); 
-        // dd($kategoris);
-        return view('admin.formkategori', compact('kategoris'));
+        return view('admin.formkategori');
     }
 
+    /**
+     * Simpan kategori baru.
+     */
     public function store(Request $request)
     {
-        $request->validate([
-            'nama_kategori' => 'required|string|max:255',
+        $validated = $request->validate([
+            'nama_kategori' => ['required', 'string', 'max:255', 'unique:kategoris,nama_kategori'],
         ]);
 
-        Kategori::create([
-            'nama_kategori' => $request->nama_kategori,
-        ]);
+        Kategori::create($validated);
 
-        return redirect()->route('admin.kategori')->with('success', 'Kategori berhasil ditambahkan.');
+        return redirect()
+            ->route('admin.kategori')
+            ->with('success', 'Kategori berhasil ditambahkan.');
     }
 
+    /**
+     * Form edit.
+     */
     public function edit($id)
     {
         $kategori = Kategori::findOrFail($id);
         return view('admin.formkategori', compact('kategori'));
     }
 
+    /**
+     * Update kategori.
+     */
     public function update(Request $request, $id)
     {
-        $request->validate([
-            'nama_kategori' => 'required|string|max:255',
-        ]);
-
         $kategori = Kategori::findOrFail($id);
-        $kategori->update([
-            'nama_kategori' => $request->nama_kategori,
+
+        $validated = $request->validate([
+            'nama_kategori' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('kategoris', 'nama_kategori')->ignore($kategori->id),
+            ],
         ]);
 
-        return redirect()->route('admin.kategori')->with('success', 'Kategori berhasil diperbarui.');
+        $kategori->update($validated);
+
+        return redirect()
+            ->route('admin.kategori')
+            ->with('success', 'Kategori berhasil diperbarui.');
     }
 
+    /**
+     * Hapus kategori.
+     */
     public function destroy($id)
     {
         $kategori = Kategori::findOrFail($id);
         $kategori->delete();
 
-        return redirect()->route('admin.kategori')->with('success', 'Kategori berhasil dihapus.');
+        return redirect()
+            ->route('admin.kategori')
+            ->with('success', 'Kategori berhasil dihapus.');
     }
 }

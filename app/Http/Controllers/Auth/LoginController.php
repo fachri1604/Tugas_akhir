@@ -35,4 +35,11 @@ class LoginController extends Controller
 
         return redirect('/login');
     }
+    protected function authenticated($request, $user)
+{
+    if (strcasecmp($user->role, 'admin') === 0) {
+        return redirect()->route('admin.dashboard');
+    }
+    return redirect()->route('home');
+}
 }

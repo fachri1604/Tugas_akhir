@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\ProdukController;
 use App\Http\Controllers\KategoriController;
 use App\Http\Controllers\UserController;
@@ -15,139 +16,210 @@ use App\Http\Controllers\CartController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PesananController;
 use App\Http\Controllers\RajaOngkirController;
-use App\Models\Produk; 
 use App\Http\Controllers\DashboardController;
-use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken as FrameworkCsrf; 
+use App\Models\Produk; 
+use Illuminate\Http\Request;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken as FrameworkCsrf;  
 
+// ==================================================
+// Helper sederhana
+// ==================================================
+$redirectIfAdmin = function () {
+    if (Auth::check() && strcasecmp(Auth::user()->role, 'admin') === 0) {
+        return redirect()->route('admin.dashboard');
+    }
+    return null;
+};
 
-Route::get('/produk2', function () {
-    return view('produk2');
-})->name('produk2.index');
+$ensureAdmin = function () {
+    if (!Auth::check()) {
+        return redirect()->route('login');
+    }
+    if (strcasecmp(Auth::user()->role, 'admin') !== 0) {
+        abort(403, 'Forbidden');
+    }
+    return null;
+};
 
-Route::get('/', function () {
+// ==================================================
+// Halaman publik (admin dilarang → redirect dashboard)
+// ==================================================
+Route::get('/', function () use ($redirectIfAdmin) {
+    if ($resp = $redirectIfAdmin()) return $resp;
+
     $products = Produk::orderBy('id_produk', 'desc')
         ->take(6)
-        ->get(['id_produk','nama_produk','gambar_produk']); // ambil kolom yang dipakai di view
+        ->get(['id_produk','nama_produk','gambar_produk']);
     return view('home', compact('products'));
 })->name('home');
 
-Route::get('/admin/pengguna', [UserController::class, 'index'])->name('admin.pengguna');
-Route::patch('/admin/pengguna/{id}', [UserController::class, 'update'])->name('admin.pengguna.update');
-Route::delete('/admin/pengguna/{id}', [UserController::class, 'destroy'])->name('admin.pengguna.destroy');
+Route::get('/produk2', function () use ($redirectIfAdmin) {
+    if ($resp = $redirectIfAdmin()) return $resp;
+    return view('produk2');
+})->name('produk2.index');
 
-Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
+Route::get('/login', function () use ($redirectIfAdmin) {
+    if ($resp = $redirectIfAdmin()) return $resp;
+    return app(LoginController::class)->showLoginForm();
+})->name('login');
 Route::post('/login', [LoginController::class, 'login']);
-Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
-Route::get('/register', [RegisteredUserController::class, 'create'])->name('register');
+
+Route::get('/register', function () use ($redirectIfAdmin) {
+    if ($resp = $redirectIfAdmin()) return $resp;
+    return app(RegisteredUserController::class)->create();
+})->name('register');
 Route::post('/register', [RegisteredUserController::class, 'store']);
 
+Route::get('/katalog', function () use ($redirectIfAdmin) {
+    if ($resp = $redirectIfAdmin()) return $resp;
+    return app(App\Http\Controllers\ProdukController::class)->katalog(request());
+})->name('katalog');
 
-// Route::get('/', function () {
-//     return view('home'); // Pastikan file home.blade.php ada di resources/views/
-// })->name('home');
+Route::get('/produk/beli/{id}', function ($id) use ($redirectIfAdmin) {
+    if ($resp = $redirectIfAdmin()) return $resp;
+    return app(ProdukController::class)->beli($id);
+})->name('produk.beli');
 
-
-
-
+Route::post('/beli/{id}', [ProdukController::class, 'beli'])->name('beli.produk');
+Route::get('/produk/{id}', [ProdukController::class, 'detail'])
+     ->name('produk.detail');
+// ==================================================
+// User login biasa
+// ==================================================
 Route::middleware(['auth'])->group(function () {
+    Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
+
     Route::get('/cart', [CartController::class, 'index'])->name('cart.index');
     Route::post('/cart/add/{id_produk}', [CartController::class, 'add'])->name('cart.add');
     Route::put('/cart/update/{id_detail}', [CartController::class, 'update'])->name('cart.update');
     Route::delete('/cart/remove/{id_detail}', [CartController::class, 'remove'])->name('cart.remove');
     Route::get('/checkout', [CartController::class, 'checkout'])->name('cart.checkout');
-    
-    // Route::post('/available-couriers', [CartController::class, 'getAvailableCouriers'])->name('cart.available-couriers');
 
-     // Form checkout manual + ongkir
     Route::get('/checkout/{id_pesanan}', [CartController::class, 'checkoutForm'])->name('checkout.form');
     Route::post('/checkout/{id_pesanan}', [CartController::class, 'checkoutProcess'])->name('checkout.process');
-    
-    // Payment show by order_id
-    Route::get('/payment/{order_id}', [PaymentController::class, 'show'])->name('payment.show');
-});
-// RajaOngkir API Routes
-Route::get('/provinces', [RajaOngkirController::class, 'getProvinces'])->name('rajaongkir.provinces');
-Route::get('/cities/{province_id}', [RajaOngkirController::class, 'getCities'])->name('rajaongkir.cities');
-Route::get('/districts/{city_id}', [RajaOngkirController::class, 'getDistricts'])
-    ->name('rajaongkir.districts');
-Route::prefix('ongkir')->name('rajaongkir.')->group(function () {
-    Route::post('/cost', [RajaOngkirController::class, 'getCost'])->name('cost');
-});
 
+    // Route::get('/payment/{order_id}', [PaymentController::class, 'show'])->name('payment.show');
 
+    Route::get('/riwayat-pesanan', [PesananController::class, 'riwayat'])
+    ->name('riwayat.index');
 
+// Detail riwayat; binding berdasarkan kolom id_pesanan (BUKAN id)
+Route::get('/riwayat-pesanan/{pesanan:id_pesanan}', [PesananController::class, 'riwayatShow'])
+    ->name('riwayat.show');
 
-// Midtrans Notification
+    Route::get('/dashboard', function () {
+        return view('dashboard');
+    })->middleware(['verified'])->name('dashboard');
 
-Route::post('/payment/notification', [PaymentController::class, 'notificationHandler'])
-    ->name('payment.notification')
-    ->withoutMiddleware([FrameworkCsrf::class]);
-
-// Midtrans Redirect
-Route::get('/payment/success/{order_id}', [PaymentController::class, 'paymentSuccess'])->name('payment.success');
-Route::get('/payment/unfinish/{order_id}', [PaymentController::class, 'paymentUnfinish'])->name('payment.unfinish');
-Route::get('/payment/error/{order_id}', [PaymentController::class, 'paymentError'])->name('payment.error');
- // webhook Midtrans (server -> server)
-
-// dipanggil dari JS onSuccess (client -> server)
-Route::post('/payment/confirm', [PaymentController::class, 'confirmFromClient'])
-    ->name('payment.confirm');
-
-// (opsional, jika masih pakai halaman show/payment lama)
-
-
-
-
-
-Route::middleware(['auth'])->group(function () {
-    Route::get('/admin/dashboard', [DashboardController::class, 'index'])
-        ->name('admin.dashboard');
-});
-
-
-
-
-
-
-Route::get('/produk/create', [ProdukController::class, 'create'])->name('produk.create');
-Route::post('/produk/store', [ProdukController::class, 'store'])->name('admin.produk.store');
-Route::get('/produk/detail/{id}', [ProdukController::class, 'getDetail'])->name('produk.detail');
-Route::get('/admin/produk', [ProdukController::class, 'index'])->name('admin.produk');
-Route::post('/admin/formproduk', [ProdukController::class, 'store'])->name('admin.formproduk.store');
-Route::get('/admin/formproduk', [ProdukController::class, 'create'])->name('admin.formproduk');
-Route::get('/admin/produk/edit/{id}', [ProdukController::class, 'edit'])->name('admin.editproduk');
-Route::put('/admin/update-produk/{id}', [ProdukController::class, 'update'])->name('admin.updateproduk');
-Route::delete('/admin/produk/delete/{id}', [ProdukController::class, 'destroy'])->name('admin.deleteproduk');
-
-Route::get('/katalog', [ProdukController::class, 'katalog'])->name('katalog');
-Route::post('/beli/{id}', [ProdukController::class, 'beli'])->name('beli.produk');
-Route::get('/produk/beli/{id}', [ProdukController::class, 'beli'])->name('produk.beli');
-
-
-Route::get('admin/kategori', [KategoriController::class, 'index'])->name('admin.kategori');
-Route::get('admin/kategori/create', [KategoriController::class, 'create'])->name('admin.formkategori');
-Route::post('admin/kategori', [KategoriController::class, 'store'])->name('admin.storekategori');
-Route::get('/admin/kategori/edit/{id}', [KategoriController::class, 'edit'])->name('admin.editkategori');
-Route::put('admin/kategori/{id}', [KategoriController::class, 'update'])->name('admin.updatekategori');
-Route::delete('admin/kategori/{id}', [KategoriController::class, 'destroy'])->name('admin.deletekategori');
-
-Route::get('admin/pesanan', [PesananController::class, 'index'])->name('admin.pesanan');
-Route::get('/dashboard', function () {
-    return view('dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
-
-// Route::get('/provinces', [RajaOngkirController::class, 'getProvinces']);
-// Route::get('/cities/{province_id}', [RajaOngkirController::class, 'getCities']);
-// Route::post('/cost', [RajaOngkirController::class, 'getCost']);
-
-
-Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
 });
+Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+// ==================================================
+// Admin-only routes (pakai $ensureAdmin)
+// ==================================================
+Route::get('/admin/dashboard', function () use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+
+    // Buat instance controller + injeksikan Request
+    $controller = app(DashboardController::class);
+    return $controller->index(request());
+})->name('admin.dashboard');
+
+// Pengguna
+// LIST + (opsional) edit_id dari query
+Route::get('/admin/pengguna', function (Request $request) use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    // panggil sebagai instance + inject Request
+    return app(UserController::class)->index($request);
+})->name('admin.pengguna');
+
+Route::patch('/admin/pengguna/{id_user}', function (Request $request, $id_user) use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(UserController::class)->update($request, $id_user);
+})->name('admin.pengguna.update');
+
+Route::delete('/admin/pengguna/{id_user}', function ($id_user) use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(UserController::class)->destroy($id_user);
+})->name('admin.pengguna.destroy');
+
+// Produk
+Route::get('/admin/produk', function () use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(ProdukController::class)->index();
+})->name('admin.produk');
+Route::get('/admin/produk/edit/{id}', function ($id) use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(ProdukController::class)->edit($id);
+})->name('admin.editproduk');
+Route::put('/admin/update-produk/{id}', function ($id) use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(ProdukController::class)->update(request(), $id);
+})->name('admin.updateproduk');
+Route::delete('/admin/produk/delete/{id}', function ($id) use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(ProdukController::class)->destroy($id);
+})->name('admin.deleteproduk');
+Route::get('/admin/formproduk', function () use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(ProdukController::class)->create();
+})->name('admin.formproduk');
+Route::post('/admin/formproduk', function () use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(ProdukController::class)->store(request());
+})->name('admin.produk.store');
+
+// Kategori
+Route::get('/admin/kategori', function () use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(KategoriController::class)->index();
+})->name('admin.kategori');
+Route::get('/admin/kategori/create', function () use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(KategoriController::class)->create();
+})->name('admin.formkategori');
+Route::post('/admin/kategori', function () use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(KategoriController::class)->store(request());
+})->name('admin.storekategori');
+Route::get('/admin/kategori/edit/{id}', function ($id) use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(KategoriController::class)->edit($id);
+})->name('admin.editkategori');
+Route::put('/admin/kategori/{id}', function ($id) use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(KategoriController::class)->update(request(), $id);
+})->name('admin.updatekategori');
+Route::delete('/admin/kategori/{id}', function ($id) use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(KategoriController::class)->destroy($id);
+})->name('admin.deletekategori');
+
+// Pesanan
+Route::get('/admin/pesanan', function () use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(PesananController::class)->index();
+})->name('admin.pesanan');
+
+// ==================================================
+// RajaOngkir & Midtrans (tetap sama)
+// ==================================================
+Route::get('/provinces', [RajaOngkirController::class, 'getProvinces'])->name('rajaongkir.provinces');
+Route::get('/cities/{province_id}', [RajaOngkirController::class, 'getCities'])->name('rajaongkir.cities');
+Route::get('/districts/{city_id}', [RajaOngkirController::class, 'getDistricts'])->name('rajaongkir.districts');
+Route::prefix('ongkir')->name('rajaongkir.')->group(function () {
+    Route::post('/cost', [RajaOngkirController::class, 'getCost'])->name('cost');
+});
+
+Route::post('/payment/notification', [PaymentController::class, 'notificationHandler'])
+    ->name('payment.notification')
+    ->withoutMiddleware([FrameworkCsrf::class]);
+Route::get('/payment/success/{order_id}', [PaymentController::class, 'paymentSuccess'])->name('payment.success');
+Route::get('/payment/unfinish/{order_id}', [PaymentController::class, 'paymentUnfinish'])->name('payment.unfinish');
+Route::get('/payment/error/{order_id}', [PaymentController::class, 'paymentError'])->name('payment.error');
+Route::post('/payment/confirm', [PaymentController::class, 'confirmFromClient'])->name('payment.confirm');
 
 require __DIR__.'/auth.php';
-
-
-Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
