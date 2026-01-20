@@ -59,3 +59,72 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+
+# Sistem Informasi Penjualan WEFASHION Berbasis Web
+
+Sistem ini dirancang untuk membantu proses **promosi dan penjualan produk fashion secara online**, mulai dari pengelolaan produk, pemesanan, hingga pencatatan transaksi penjualan secara terstruktur.
+
+---
+
+## 🎓 Tugas Akhir
+**Judul:** Rancang Bangun Website WEFASHION untuk Promosi dan Penjualan  
+**Penulis:** Fachri Hibatul Haq (3202216122) 
+**Program Studi:** D3 Teknik Informatika  
+**Institusi:** Politeknik Negeri Pontianak  
+**Tahun:** 2025  
+
+---
+
+## 📄 Abstrak
+Perkembangan teknologi informasi mendorong pelaku usaha untuk memanfaatkan platform digital sebagai media promosi dan penjualan produk. Usaha fashion yang masih mengandalkan sistem penjualan konvensional sering mengalami keterbatasan dalam jangkauan pemasaran, pengelolaan data produk, serta pencatatan transaksi penjualan. Oleh karena itu, penelitian ini merancang dan membangun Website WEFASHION sebagai sistem informasi penjualan berbasis web.
+
+Metode pengembangan sistem yang digunakan adalah metode **Waterfall**, yang meliputi tahap analisis kebutuhan, perancangan sistem, implementasi, pengujian, hingga pemeliharaan. Website ini dibangun menggunakan teknologi web modern pada sisi frontend dan backend, serta didukung dengan basis data untuk penyimpanan data produk dan transaksi.
+
+Hasil pengujian sistem menunjukkan bahwa seluruh fitur utama berjalan dengan baik, seperti pengelolaan produk oleh admin, tampilan katalog produk, proses pemesanan oleh pelanggan, serta pencatatan data penjualan. Dengan adanya website WEFASHION, proses promosi dan penjualan produk fashion dapat dilakukan secara lebih efektif, efisien, dan terintegrasi.
+
+Kesimpulannya, website WEFASHION mampu menjadi solusi digital bagi pelaku usaha fashion dalam meningkatkan jangkauan pemasaran dan pengelolaan penjualan secara sistematis.
+
+---
+
+## 🚀 Fitur Utama
+- Registrasi & Login Pengguna  
+- Manajemen Produk Fashion  
+- Manajemen Kategori Produk  
+- Katalog Produk  
+- Detail Produk  
+- Sistem Pemesanan  
+- Manajemen Pesanan oleh Admin  
+- Laporan Penjualan  
+
+---
+
+## 🛠️ Tech Stack
+- **Frontend:** HTML, CSS, JavaScript  
+- **Backend:** PHP  
+- **Database:** MySQL  
+- **Framework / Library:** Bootstrap  
+- **Web Server:** Apache (XAMPP)
+
+---
+
+## ⚙️ Instalasi & Menjalankan Aplikasi
+
+### 📌 Setup Aplikasi
+```bash
+1. Clone repository
+git clone https://github.com/username/wefashion.git
+
+2. Pindahkan folder ke direktori htdocs
+Konfigurasi Database
+
+Buat database dengan nama:
+
+db_wefashion
+
+
+Import file database .sql ke phpMyAdmin
+
+Atur koneksi database pada file:
+
+config/database.php
