@@ -1,3 +1,4 @@
+{{-- resources/views/admin/dashboard.blade.php --}}
 @extends('layouts.admin')
 
 @section('content')
@@ -29,34 +30,45 @@
     </form>
 
     {{-- KARTU-KARTU --}}
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+    <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-6 mb-6">
         <div class="bg-white p-4 rounded shadow text-center">
-            <h3 class="text-lg font-medium text-gray-600">Total Produk</h3>
+            <h3 class="text-sm font-medium text-gray-600">Total Produk</h3>
             <p class="text-3xl font-bold text-gray-900 mt-2">{{ number_format($totalProduk ?? 0) }}</p>
         </div>
 
         <div class="bg-white p-4 rounded shadow text-center">
-            <h3 class="text-lg font-medium text-gray-600">Pengguna</h3>
+            <h3 class="text-sm font-medium text-gray-600">Pengguna</h3>
             <p class="text-3xl font-bold text-gray-900 mt-2">{{ number_format($totalPengguna ?? 0) }}</p>
         </div>
 
         <div class="bg-white p-4 rounded shadow text-center">
-            <h3 class="text-lg font-medium text-gray-600">Pesanan</h3>
+            <h3 class="text-sm font-medium text-gray-600">Pesanan</h3>
             <p class="text-3xl font-bold text-gray-900 mt-2">{{ number_format($totalPesanan ?? 0) }}</p>
         </div>
 
         <div class="bg-white p-4 rounded shadow text-center">
-            <h3 class="text-lg font-medium text-gray-600">Dikirim (success)</h3>
+            <h3 class="text-sm font-medium text-gray-600">Dikirim (success)</h3>
             <p class="text-3xl font-bold text-gray-900 mt-2">{{ number_format($totalDikirim ?? 0) }}</p>
         </div>
 
         <div class="bg-white p-4 rounded shadow text-center">
-            <h3 class="text-lg font-medium text-gray-600">Belum Dikirim (pending)</h3>
+            <h3 class="text-sm font-medium text-gray-600">Belum Dikirim (pending)</h3>
             <p class="text-3xl font-bold text-gray-900 mt-2">{{ number_format($totalBelumDikirim ?? 0) }}</p>
+        </div>
+
+        {{-- KARTU STOK TAMBAHAN --}}
+        <div class="bg-white p-4 rounded shadow text-center">
+            <h3 class="text-sm font-medium text-gray-600">Total Stok Barang</h3>
+            <p class="text-3xl font-bold text-gray-900 mt-2">{{ number_format($totalStokBarang ?? 0) }}</p>
+        </div>
+
+        <div class="bg-white p-4 rounded shadow text-center xl:col-span-2 md:col-span-1">
+            <h3 class="text-sm font-medium text-gray-600">Produk Habis</h3>
+            <p class="text-3xl font-bold text-gray-900 mt-2">{{ number_format($jumlahProdukHabis ?? 0) }}</p>
         </div>
     </div>
 
-    {{-- RINGKASAN PENJUALAN --}}
+    {{-- RINGKASAN PENJUALAN + PRODUK TERLARIS --}}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div class="bg-white p-4 rounded shadow">
             <h3 class="text-lg font-semibold text-gray-800">Ringkasan Penjualan</h3>
@@ -67,7 +79,7 @@
                 </div>
                 <div class="border rounded p-3 text-center">
                     <div class="text-sm text-gray-500">Omzet (Rp)</div>
-                    <div class="text-2xl font-bold">{{ number_format($ringkasan->omzet ?? 0, 0, ',', '.') }}</div>
+                    <div class="text-2xl font-bold">Rp {{ number_format($ringkasan->omzet ?? 0, 0, ',', '.') }}</div>
                 </div>
             </div>
         </div>
@@ -82,6 +94,7 @@
                             <th class="px-3 py-2">Produk</th>
                             <th class="px-3 py-2">Qty</th>
                             <th class="px-3 py-2">Subtotal</th>
+                            <th class="px-3 py-2">Stok</th> {{-- kolom stok --}}
                         </tr>
                     </thead>
                     <tbody>
@@ -90,15 +103,47 @@
                                 <td class="px-3 py-2">{{ $row->nama_produk }}</td>
                                 <td class="px-3 py-2">{{ number_format($row->qty) }}</td>
                                 <td class="px-3 py-2">Rp {{ number_format($row->subtotal, 0, ',', '.') }}</td>
+                                <td class="px-3 py-2">{{ number_format($row->stok) }}</td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="3" class="px-3 py-4 text-center text-gray-500">Tidak ada data</td>
+                                <td colspan="4" class="px-3 py-4 text-center text-gray-500">Tidak ada data</td>
                             </tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
+        </div>
+    </div>
+
+    {{-- STOK MENIPIS --}}
+    <div class="bg-white p-4 rounded shadow mb-6">
+        <h3 class="text-lg font-semibold text-gray-800">
+            Stok Menipis (≤ {{ $threshold }})
+        </h3>
+        <div class="mt-4 overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead>
+                    <tr class="text-left bg-gray-50">
+                        <th class="px-3 py-2">Produk</th>
+                        <th class="px-3 py-2">Stok</th>
+                        <th class="px-3 py-2">Harga</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($stokMenipis as $p)
+                        <tr class="border-t {{ $p->stok == 0 ? 'bg-red-50' : '' }}">
+                            <td class="px-3 py-2">{{ $p->nama_produk }}</td>
+                            <td class="px-3 py-2 font-semibold">{{ number_format($p->stok) }}</td>
+                            <td class="px-3 py-2">Rp {{ number_format($p->harga, 0, ',', '.') }}</td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="3" class="px-3 py-4 text-center text-gray-500">Semua aman 👍</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
         </div>
     </div>
 
@@ -136,7 +181,7 @@
             <h3 class="text-lg font-semibold text-gray-800 mb-3">Grafik Omzet per Hari</h3>
             <canvas id="chartOmzet" height="140"></canvas>
 
-            {{-- CDN Chart.js; aman dibiarkan di sini agar tak bergantung layout --}}
+            {{-- CDN Chart.js --}}
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
             <script>
             (function () {
@@ -145,10 +190,10 @@
 
                 // Data dari server
                 const labels = @json(
-                    $perHari->pluck('tgl')->map(fn($d)=> \Carbon\Carbon::parse($d)->format('d M'))->values()
+                    ($perHari ?? collect())->pluck('tgl')->map(fn($d)=> \Carbon\Carbon::parse($d)->format('d M'))->values()
                 );
-                const data   = @json(
-                    $perHari->pluck('omzet')->map(fn($v)=>(float)$v)->values()
+                const dataOmzet = @json(
+                    ($perHari ?? collect())->pluck('omzet')->map(fn($v)=>(float)$v)->values()
                 );
 
                 if (typeof Chart === 'undefined') {
@@ -163,7 +208,7 @@
                         labels,
                         datasets: [{
                             label: 'Omzet (Rp)',
-                            data,
+                            data: dataOmzet,
                             tension: 0.25,
                             borderWidth: 2,
                             fill: false

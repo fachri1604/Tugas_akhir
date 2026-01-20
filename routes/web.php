@@ -6,10 +6,6 @@ use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\ProdukController;
 use App\Http\Controllers\KategoriController;
 use App\Http\Controllers\UserController;
-use App\Http\Controllers\StokController;
-use App\Http\Controllers\DetailPesananController;
-use App\Http\Controllers\UlasanProdukController;
-use App\Http\Controllers\PembayaranController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\CartController;
@@ -18,6 +14,7 @@ use App\Http\Controllers\PesananController;
 use App\Http\Controllers\RajaOngkirController;
 use App\Http\Controllers\DashboardController;
 use App\Models\Produk; 
+use App\Http\Controllers\StokController;
 use Illuminate\Http\Request;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken as FrameworkCsrf;  
 
@@ -97,6 +94,12 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/checkout/{id_pesanan}', [CartController::class, 'checkoutForm'])->name('checkout.form');
     Route::post('/checkout/{id_pesanan}', [CartController::class, 'checkoutProcess'])->name('checkout.process');
+    Route::get('/orders/{id}/thank-you', function($id){
+    return view('thankyou', ['id' => $id]);
+})->name('orders.thankyou')->middleware('auth');
+Route::post('/checkout/{id_pesanan}/pay-on-site', [CartController::class, 'payOnSite'])
+    ->name('checkout.pay_on_site')
+    ->middleware('auth');
 
     // Route::get('/payment/{order_id}', [PaymentController::class, 'show'])->name('payment.show');
 
@@ -204,6 +207,24 @@ Route::get('/admin/pesanan', function () use ($ensureAdmin) {
     return app(PesananController::class)->index();
 })->name('admin.pesanan');
 
+// Tambah: Update Status (PUT JSON)
+Route::put('/admin/pesanan/{id}/status', function (Request $request, $id) use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(PesananController::class)->updateStatus($request, $id);
+})->name('admin.pesanan.update_status');
+
+// Tambah: Recalculate Total (PUT JSON)
+Route::put('/admin/pesanan/{id}/total', function ($id) use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(PesananController::class)->updateTotal($id);
+})->name('admin.pesanan.update_total');
+
+// Tambah: Hapus Pesanan (DELETE JSON)
+Route::delete('/admin/pesanan/{id}', function ($id) use ($ensureAdmin) {
+    if ($resp = $ensureAdmin()) return $resp;
+    return app(PesananController::class)->destroy($id);
+})->name('admin.pesanan.destroy');
+
 // ==================================================
 // RajaOngkir & Midtrans (tetap sama)
 // ==================================================
@@ -221,5 +242,16 @@ Route::get('/payment/success/{order_id}', [PaymentController::class, 'paymentSuc
 Route::get('/payment/unfinish/{order_id}', [PaymentController::class, 'paymentUnfinish'])->name('payment.unfinish');
 Route::get('/payment/error/{order_id}', [PaymentController::class, 'paymentError'])->name('payment.error');
 Route::post('/payment/confirm', [PaymentController::class, 'confirmFromClient'])->name('payment.confirm');
+
+
+Route::prefix('admin')->group(function () {
+    Route::get('/stok', [StokController::class, 'index'])->name('admin.stok.index');
+    Route::get('/stok/create', [StokController::class, 'create'])->name('admin.stok.create');
+    Route::post('/stok/store', [StokController::class, 'store'])->name('admin.stok.store');
+});
+
+Route::get('/produk/{id}/ukuran', [ProdukController::class, 'getUkuran'])->name('produk.ukuran');
+Route::get('/admin/produk/{id}/ukuran', [App\Http\Controllers\ProdukController::class, 'getUkuran']);
+Route::post('/admin/pesanan/{id}/bayar', [App\Http\Controllers\PesananController::class, 'bayar']);
 
 require __DIR__.'/auth.php';

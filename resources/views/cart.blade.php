@@ -1,7 +1,8 @@
+{{-- resources/views/cart.blade.php --}}
 @extends('layouts.app')
 
 @section('content')
-<div class="max-w-6xl mx-auto py-12">
+<div class="max-w-6xl mx-auto py-12" x-data="{ openModal: false }">
     <h2 class="text-2xl font-semibold mb-6">Keranjang Belanja</h2>
 
     @if(session('success'))
@@ -42,21 +43,18 @@
                             <div class="font-medium">{{ $detail->produk->nama_produk }}</div>
                         </td>
 
-                        {{-- TAMPILKAN UKURAN --}}
                         <td class="p-2 text-center align-top">
                             <span class="inline-block px-2 py-1 text-xs rounded border">
                                 {{ $detail->ukuran ?? '-' }}
                             </span>
                         </td>
 
-                        {{-- TAMPILKAN WARNA --}}
                         <td class="p-2 text-center align-top">
                             <span class="inline-block px-2 py-1 text-xs rounded border">
                                 {{ $detail->warna ?? '-' }}
                             </span>
                         </td>
 
-                        {{-- UPDATE JUMLAH SAJA (seperti sebelumnya) --}}
                         <td class="p-2 text-center align-top">
                             <form action="{{ route('cart.update', $detail->id_detail) }}" method="POST" class="inline-flex items-center space-x-2">
                                 @csrf
@@ -89,11 +87,40 @@
                 Total: Rp {{ number_format($pesanan->total_harga, 0, ',', '.') }}
             </h3>
 
-            {{-- Tombol menuju form checkout --}}
-            <a href="{{ route('checkout.form', $pesanan->id_pesanan) }}"
-               class="inline-block bg-pink-600 text-white px-4 py-2 rounded hover:bg-pink-700 text-sm">
-                Lanjut ke Checkout
-            </a>
+            {{-- Tombol memunculkan modal --}}
+            <button @click="openModal = true"
+                class="inline-block bg-pink-600 text-white px-4 py-2 rounded hover:bg-pink-700 text-sm">
+                Lanjutkan
+            </button>
+        </div>
+
+        {{-- Modal Pilihan Pembayaran --}}
+        <div x-show="openModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center">
+            <div class="absolute inset-0 bg-black/50" @click="openModal = false"></div>
+            <div class="relative bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+                <h3 class="text-lg font-semibold mb-2">Lanjut ke Checkout</h3>
+                <p class="text-sm text-gray-600 mb-4">
+                    Apakah Anda ingin membayar di lokasi (COD) atau lanjut ke form checkout online?
+                </p>
+
+                <div class="flex flex-col sm:flex-row gap-3">
+                    {{-- 1) Bayar di Lokasi (COD) --}}
+                    <form action="{{ route('checkout.pay_on_site', $pesanan->id_pesanan) }}" method="POST" class="flex-1">
+                        @csrf
+                        <button class="w-full border border-gray-300 rounded px-4 py-2 hover:bg-gray-50">
+                            Bayar di Lokasi
+                        </button>
+                    </form>
+
+                    {{-- 2) Lanjut ke Form Checkout (Midtrans) --}}
+                    <a href="{{ route('checkout.form', $pesanan->id_pesanan) }}"
+                       class="flex-1 inline-flex items-center justify-center bg-pink-600 text-white px-4 py-2 rounded hover:bg-pink-700">
+                        Form Checkout
+                    </a>
+                </div>
+
+                <button @click="openModal = false" class="mt-4 text-sm text-gray-500 hover:underline">Batal</button>
+            </div>
         </div>
     @else
         <p>Keranjang belanja Anda kosong.</p>

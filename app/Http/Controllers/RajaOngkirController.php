@@ -53,13 +53,11 @@ public function getCost(Request $request)
         'courier'     => ['nullable','string'],
     ]);
 
-    // kalau kamu ingin “seperti website Komerce” (cari semua kurir),
-    // kirim semua kurir yang kamu izinkan ketika user tidak memilih apa pun:
+    
     $courier = trim($request->courier ?? '');
     if ($courier === '' || $courier === 'all') {
-        $courier = implode(':', config('rajaongkir.allowed_couriers')); // ex: 'jne:sicepat:jnt'
-        // kalau mau full seperti demo Komerce:
-        // $courier = 'jne:sicepat:ide:sap:jnt:ninja:tiki:lion:anteraja:pos:ncs:rex:rpx:sentral:star:wahana:dse';
+        $courier = implode(':', config('rajaongkir.allowed_couriers')); 
+        
     }
 
     $payload = [

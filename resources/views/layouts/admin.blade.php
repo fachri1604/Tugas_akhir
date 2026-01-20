@@ -64,6 +64,15 @@
                             <span>Produk</span>
                         </a>
                     </li>
+
+                    <li>
+                        <a href="{{ route('admin.stok.index') }}" 
+                           class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
+                                  {{ request()->routeIs('admin.stok.index*') ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-100 hover:bg-indigo-600 hover:bg-opacity-50' }}">
+                            <i class="fas fa-tshirt mr-3"></i>
+                            <span>Stok</span>
+                        </a>
+                    </li>
                     <li>
                         <a href="{{ route('admin.pengguna') }}" 
                            class="flex items-center px-4 py-3 rounded-lg transition-all duration-200 
@@ -171,5 +180,54 @@
 
     <!-- Alpine JS -->
     <script src="https://cdn.jsdelivr.net/gh/alpinejs/alpine@v2.8.2/dist/alpine.min.js" defer></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+
+    <script>
+function sizeEditor(initialRows = []) {
+    return {
+        rows: initialRows,
+        stringValue: '',
+        jumlah: '', // input jumlah ukuran
+
+        add() {
+            this.rows.push({ label: '', stock: '' });
+        },
+        remove(i) {
+            this.rows.splice(i, 1);
+            this.rebuildString();
+        },
+        coerce(i) {
+            let val = this.rows[i].stock;
+            if (val === '' || val === null) return;
+            this.rows[i].stock = parseInt(val) || 0;
+            this.rebuildString();
+        },
+        rebuildString() {
+            const out = [];
+            this.rows.forEach(r => {
+                if (r.label) {
+                    if (r.stock !== '' && r.stock !== null) {
+                        out.push(r.label + '=' + r.stock);
+                    } else {
+                        out.push(r.label);
+                    }
+                }
+            });
+            this.stringValue = out.join(',');
+        },
+        generateRows() {
+            this.rows = [];
+            let total = parseInt(this.jumlah) || 0;
+            for (let i = 0; i < total; i++) {
+                this.rows.push({ label: '', stock: '' });
+            }
+            this.rebuildString();
+        }
+    }
+}
+</script>
+
 </body>
+
 </html>
+

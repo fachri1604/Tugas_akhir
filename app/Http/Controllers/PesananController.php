@@ -6,10 +6,11 @@ use App\Models\Pesanan;
 use App\Models\DetailPesanan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class PesananController extends Controller
 {
-    // =================== ADMIN (tetap) ===================
+    // =================== ADMIN ===================
 
     public function index()
     {
@@ -41,6 +42,10 @@ class PesananController extends Controller
         return response()->json($pesanan);
     }
 
+    /**
+     * Hitung ulang total_harga dari detail_pesanan (jumlah * harga_satuan/subtotal).
+     * Mengembalikan JSON.
+     */
     public function updateTotal($id)
     {
         $pesanan = Pesanan::findOrFail($id);
@@ -52,18 +57,62 @@ class PesananController extends Controller
         return response()->json($pesanan);
     }
 
+    /**
+     * Ubah status. Otomatis:
+     * - pending/failed -> success  => KURANGI stok
+     * - success -> pending/failed  => KEMBALIKAN stok
+     * - perubahan lain             => hanya ganti status
+     *
+     * Enum di DB kamu: pending|failed|success
+     */
     public function updateStatus(Request $request, $id)
     {
-        $pesanan = Pesanan::findOrFail($id);
+        $pesanan = Pesanan::with(['detailPesanans.produk'])->findOrFail($id);
 
         $validated = $request->validate([
-            'status' => 'required|in:pending,diproses,selesai,dibatalkan,success,failed',
+            'status' => 'required|in:pending,failed,success',
         ]);
 
-        $pesanan->status = $validated['status'];
-        $pesanan->save();
+        $old = $pesanan->status;
+        $new = $validated['status'];
 
-        return response()->json($pesanan);
+        DB::transaction(function () use ($pesanan, $old, $new) {
+
+            // pending/failed -> success  => KURANGI stok
+            if ($old !== 'success' && $new === 'success') {
+                foreach ($pesanan->detailPesanans as $d) {
+                    $produk = $d->produk()->lockForUpdate()->first();
+                    if ($produk->stok < $d->jumlah) {
+                        throw new \RuntimeException(
+                            "Stok produk '{$produk->nama_produk}' tidak cukup. Sisa: {$produk->stok}, butuh: {$d->jumlah}"
+                        );
+                    }
+                    $produk->stok = $produk->stok - $d->jumlah;
+                    $produk->save();
+                }
+                $pesanan->status = 'success';
+                $pesanan->save();
+                return;
+            }
+
+            // success -> (pending/failed)  => KEMBALIKAN stok
+            if ($old === 'success' && $new !== 'success') {
+                foreach ($pesanan->detailPesanans as $d) {
+                    $produk = $d->produk()->lockForUpdate()->first();
+                    $produk->stok = $produk->stok + $d->jumlah;
+                    $produk->save();
+                }
+                $pesanan->status = $new;
+                $pesanan->save();
+                return;
+            }
+
+            // Perubahan lain: hanya ubah status
+            $pesanan->status = $new;
+            $pesanan->save();
+        });
+
+        return response()->json($pesanan->fresh('detailPesanans.produk'));
     }
 
     public function destroy($id)
@@ -74,14 +123,10 @@ class PesananController extends Controller
         return response()->json(['message' => 'Pesanan berhasil dihapus']);
     }
 
-    // =================== USER (riwayat) ===================
+    // =================== USER (RIWAYAT) ===================
 
-    /**
-     * List riwayat milik user yang sedang login.
-     */
     public function riwayat(Request $request)
     {
-        // gunakan kolom id_user (bukan id)
         $userId = Auth::user()->id_user;
 
         $pesanans = Pesanan::withCount('detailPesanans')
@@ -90,24 +135,40 @@ class PesananController extends Controller
             ->paginate(10)
             ->withQueryString();
 
-        // view kamu bernama 'riwayatpesanan.blade.php'
         return view('riwayatpesanan', compact('pesanans'));
     }
 
     /**
-     * Detail satu pesanan milik user (route model binding by id_pesanan).
-     * Route: /riwayat-pesanan/{pesanan:id_pesanan}
+     * Route model binding by id_pesanan: /riwayat-pesanan/{pesanan:id_pesanan}
      */
     public function riwayatShow(Pesanan $pesanan)
     {
-        // pastikan yang akses adalah pemiliknya
         if ((int) $pesanan->id_user !== (int) Auth::user()->id_user) {
             abort(403);
         }
-
         $pesanan->loadMissing(['detailPesanans.produk', 'user']);
-
-        // view kamu bernama 'riwayatpesanan-detail.blade.php'
         return view('riwayatpesanan-detail', compact('pesanan'));
     }
+ public function bayar(Request $request, $id)
+{
+    $pesanan = Pesanan::findOrFail($id);
+
+    if ($request->uang_diterima < $pesanan->total_harga) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Uang kurang'
+        ]);
+    }
+
+    $pesanan->update([
+        'status' => 'success',
+        'uang_diterima' => $request->uang_diterima,
+        'kembalian' => $request->uang_diterima - $pesanan->total_harga
+    ]);
+
+    return response()->json(['success' => true]);
 }
+
+}
+
+

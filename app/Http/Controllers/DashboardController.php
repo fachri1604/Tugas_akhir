@@ -10,81 +10,83 @@ use App\Models\DetailPesanan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
-use Carbon\CarbonPeriod;
 
 class DashboardController extends Controller
 {
     public function index(Request $request)
     {
-        // (opsional) kunci hanya admin
         if (!Auth::check() || strcasecmp(Auth::user()->role ?? '', 'admin') !== 0) {
             abort(403);
         }
 
-        // Periode: default 30 hari terakhir
+        // Validasi ringan (opsional)
+        $request->validate([
+            'from' => ['nullable','date_format:Y-m-d'],
+            'to'   => ['nullable','date_format:Y-m-d'],
+        ]);
+
+        // Periode default 30 hari
         $from = $request->query('from') ?: now()->subDays(30)->toDateString();
         $to   = $request->query('to')   ?: now()->toDateString();
 
         $dateFrom = Carbon::parse($from)->startOfDay();
         $dateTo   = Carbon::parse($to)->endOfDay();
+        if ($dateFrom->gt($dateTo)) {
+            [$dateFrom, $dateTo] = [$dateTo->copy()->startOfDay(), $dateFrom->copy()->endOfDay()];
+            [$from, $to] = [$dateFrom->toDateString(), $dateTo->toDateString()];
+        }
 
-        // Basis query pesanan sukses pada periode
         $base = Pesanan::query()
             ->where('status', 'success')
             ->whereBetween('created_at', [$dateFrom, $dateTo]);
 
-        // Ringkasan
+        // Ringkasan umum
         $ringkasan = (clone $base)
             ->selectRaw('COUNT(*) AS jumlah_pesanan, COALESCE(SUM(total_harga),0) AS omzet')
             ->first();
 
-        // Agregasi per hari (raw)
+        // Agregasi per hari: HANYA baris yang ADA transaksi (tanpa mengisi tanggal kosong)
         $perHariRaw = (clone $base)
             ->selectRaw('DATE(created_at) AS tgl, COUNT(*) AS jml, COALESCE(SUM(total_harga),0) AS omzet')
             ->groupBy('tgl')
             ->orderBy('tgl')
             ->get();
 
-        // Lengkapi tanggal yang kosong supaya grafik mulus
-        $period = CarbonPeriod::create($dateFrom->copy()->startOfDay(), $dateTo->copy()->startOfDay());
-        $map    = $perHariRaw->keyBy('tgl');
-
-        $perHari = collect();
+        // Bangun koleksi & data chart langsung dari hasil query
+        $perHari     = collect();
         $chartLabels = [];
-        $chartData   = []; // omzet
-        $chartCount  = []; // jumlah pesanan
+        $chartData   = [];
+        $chartCount  = [];
 
-        foreach ($period as $day) {
-            $key = $day->toDateString();
-            $row = $map->get($key);
-
-            $tgl  = $day->format('Y-m-d');
-            $jml  = (int) ($row->jml   ?? 0);
-            $omzt = (int) ($row->omzet ?? 0);
+        foreach ($perHariRaw as $row) {
+            // $row->tgl: 'Y-m-d'
+            $tglCarbon = Carbon::parse($row->tgl);
 
             $perHari->push((object)[
-                'tgl'   => $tgl,
-                'jml'   => $jml,
-                'omzet' => $omzt,
+                'tgl'   => $tglCarbon->format('Y-m-d'),
+                'jml'   => (int) $row->jml,
+                'omzet' => (float) $row->omzet,
             ]);
 
-            $chartLabels[] = $day->format('d M');
-            $chartData[]   = (float) $omzt;
-            $chartCount[]  = (int) $jml;
+            $chartLabels[] = $tglCarbon->format('d M');     // contoh: 01 Sep
+            $chartData[]   = (float) $row->omzet;           // omzet per hari
+            $chartCount[]  = (int) $row->jml;               // jumlah pesanan per hari
         }
 
-        // TOP 5 produk terlaris (periode & hanya pesanan sukses)
+        // Produk terlaris (tambahkan stok agar bisa ditampilkan di tabel)
         $popularProduk = DetailPesanan::query()
             ->join('pesanans', 'detail_pesanans.id_pesanan', '=', 'pesanans.id_pesanan')
             ->join('produks',   'detail_pesanans.id_produk',  '=', 'produks.id_produk')
             ->whereBetween('pesanans.created_at', [$dateFrom, $dateTo])
             ->where('pesanans.status', 'success')
             ->select(
+                'produks.id_produk',
                 'produks.nama_produk',
+                'produks.stok',
                 DB::raw('SUM(detail_pesanans.jumlah) AS qty'),
                 DB::raw('COALESCE(SUM(detail_pesanans.subtotal),0) AS subtotal')
             )
-            ->groupBy('produks.nama_produk')
+            ->groupBy('produks.id_produk','produks.nama_produk','produks.stok')
             ->orderByDesc('qty')
             ->limit(5)
             ->get();
@@ -93,14 +95,28 @@ class DashboardController extends Controller
         $totalProduk        = Produk::count();
         $totalPengguna      = User::count();
         $totalPesanan       = Pesanan::count();
-        $totalDikirim       = Pesanan::where('status', 'success')->count(); // contoh
-        $totalBelumDikirim  = Pesanan::where('status', 'pending')->count(); // contoh
+        $totalDikirim       = Pesanan::where('status', 'success')->count();
+        $totalBelumDikirim  = Pesanan::where('status', 'pending')->count();
+
+        // Metrik stok
+        $totalStokBarang    = (int) Produk::sum('stok');
+        $jumlahProdukHabis  = (int) Produk::where('stok', 0)->count();
+
+        // Daftar stok menipis
+        $threshold = 5;
+        $stokMenipis = Produk::select('id_produk','nama_produk','stok','harga')
+            ->where('stok', '>=', 0)
+            ->where('stok', '<=', $threshold)
+            ->orderBy('stok', 'asc')
+            ->orderBy('nama_produk')
+            ->limit(10)
+            ->get();
 
         return view('admin.dashboard', [
             'from'               => $from,
             'to'                 => $to,
             'ringkasan'          => $ringkasan,
-            'perHari'            => $perHari,       // sudah berisi semua tanggal
+            'perHari'            => $perHari,
             'popularProduk'      => $popularProduk,
             'totalProduk'        => $totalProduk,
             'totalPengguna'      => $totalPengguna,
@@ -108,10 +124,14 @@ class DashboardController extends Controller
             'totalDikirim'       => $totalDikirim,
             'totalBelumDikirim'  => $totalBelumDikirim,
 
-            // untuk Chart.js
             'chartLabels'        => $chartLabels,
             'chartData'          => $chartData,
             'chartCount'         => $chartCount,
+
+            'totalStokBarang'    => $totalStokBarang,
+            'jumlahProdukHabis'  => $jumlahProdukHabis,
+            'stokMenipis'        => $stokMenipis,
+            'threshold'          => $threshold,
         ]);
     }
 }

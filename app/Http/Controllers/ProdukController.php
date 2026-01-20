@@ -5,7 +5,11 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Produk;
 use App\Models\Kategori;
+use App\Models\Pesanan;
+use App\Models\DetailPesanan;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Auth;
+use App\Support\SizeStock; // ⬅️ helper untuk parsing ukuran+stok
 
 class ProdukController extends Controller
 {
@@ -22,8 +26,7 @@ class ProdukController extends Controller
     }
 
     /**
-     * Simpan produk baru dengan SATU input multiple: images[]
-     * primary_index (opsional) untuk menentukan foto utama dari batch baru.
+     * Simpan produk baru
      */
     public function store(Request $request)
     {
@@ -36,18 +39,36 @@ class ProdukController extends Controller
             'alamat'           => 'nullable|string',
             'stok'             => 'nullable|integer',
             'kategori_id'      => 'nullable|exists:kategoris,id',
-
-            // ==== SATU INPUT MULTIPLE ====
-            'images'           => 'required', // harus ada minimal 1
+            'images'           => 'required',
             'images.*'         => 'image|mimes:jpeg,png,jpg,gif,webp,svg|max:4096',
             'primary_index'    => 'nullable|integer|min:0',
         ]);
 
-        // 1) Simpan produk (tanpa gambar dulu)
-        $produk = Produk::create(collect($validated)->except(['images', 'primary_index'])->toArray());
+        // Normalisasi ukuran: ubah ke bentuk standar (SizeStock::build)
+        // dan hitung stok total (jumlah angka pada setiap ukuran)
+        $rawSizes = $validated['ukuran_tersedia'] ?? '';
+        $parsed = SizeStock::parse($rawSizes);          // hasil map: key => ['label'=>..., 'stock'=>...]
+        $normalizedSizes = SizeStock::build($parsed);   // string yang akan disimpan di DB
 
-        // 2) Upload semua gambar ke folder khusus produk
-        $pk      = $produk->getKey(); // aman meskipun PK bukan "id"
+        // compute total stock dari parsed map: jumlah semua angka (null/empty diabaikan)
+        $totalStock = 0;
+        foreach ($parsed as $row) {
+            if (isset($row['stock']) && $row['stock'] !== null && $row['stock'] !== '') {
+                $totalStock += (int) $row['stock'];
+            }
+        }
+
+        // siapkan data untuk disimpan (tanpa images)
+        $dataToSave = collect($validated)->except(['images','primary_index'])->toArray();
+        // pastikan kolom ukuran_tersedia berisi normalisasi
+        $dataToSave['ukuran_tersedia'] = $normalizedSizes;
+        // pastikan stok tidak null (jika admin tidak mengisi angka ukuran -> totalStock = 0)
+        $dataToSave['stok'] = $totalStock;
+
+        $produk = Produk::create($dataToSave);
+
+        // Upload images ke folder per produk
+        $pk      = $produk->getKey();
         $baseDir = "produk_images/{$pk}";
         $uploaded = [];
 
@@ -58,7 +79,7 @@ class ProdukController extends Controller
             $uploaded[] = $path;
         }
 
-        // 3) Tentukan foto utama
+        // tentukan foto utama
         $mainPath = $uploaded[0] ?? null;
         if ($request->filled('primary_index')) {
             $idx = (int) $request->primary_index;
@@ -77,20 +98,16 @@ class ProdukController extends Controller
         $produk    = Produk::findOrFail($id);
         $kategoris = Kategori::all();
 
-        // Kumpulkan semua foto yang sudah ada di folder produk
         $pk      = $produk->getKey();
         $baseDir = "produk_images/{$pk}";
         $files   = Storage::disk('public')->exists($baseDir) ? Storage::disk('public')->files($baseDir) : [];
-        $existingImages = array_values(array_filter($files, function ($p) {
-            return preg_match('/\.(jpe?g|png|webp|gif|svg)$/i', $p);
-        }));
+        $existingImages = array_values(array_filter($files, fn($p) => preg_match('/\.(jpe?g|png|webp|gif|svg)$/i', $p)));
 
         return view('admin.formproduk', compact('produk', 'kategoris', 'existingImages'));
     }
 
     /**
-     * Update data produk + tambah/hapus/set utama gambar
-     * Tetap memakai SATU input multiple: images[]
+     * Update produk
      */
     public function update(Request $request, $id)
     {
@@ -105,35 +122,47 @@ class ProdukController extends Controller
             'alamat'           => 'nullable|string',
             'stok'             => 'nullable|integer',
             'kategori_id'      => 'nullable|exists:kategoris,id',
-
-            // tambah batch baru (opsional)
             'images.*'         => 'nullable|image|mimes:jpeg,png,jpg,gif,webp,svg|max:4096',
-            'primary_index'    => 'nullable|integer|min:0', // pilih utama dari batch baru
-            'primary_path'     => 'nullable|string',        // set utama dari foto lama
+            'primary_index'    => 'nullable|integer|min:0',
+            'primary_path'     => 'nullable|string',
             'delete_paths'     => 'array',
-            'delete_paths.*'   => 'string',                 // path relatif yang ingin dihapus
+            'delete_paths.*'   => 'string',
         ]);
 
-        // Update field non-file
-        $produk->update(collect($validated)->except(['images', 'primary_index', 'primary_path', 'delete_paths'])->toArray());
+        // Normalisasi ukuran dan hitung stok total
+        $rawSizes = $validated['ukuran_tersedia'] ?? ($produk->ukuran_tersedia ?? '');
+        $parsed = SizeStock::parse($rawSizes);
+        $normalizedSizes = SizeStock::build($parsed);
+
+        $totalStock = 0;
+        foreach ($parsed as $row) {
+            if (isset($row['stock']) && $row['stock'] !== null && $row['stock'] !== '') {
+                $totalStock += (int) $row['stock'];
+            }
+        }
+
+        $updateData = collect($validated)->except(['images','primary_index','primary_path','delete_paths'])->toArray();
+        $updateData['ukuran_tersedia'] = $normalizedSizes;
+        $updateData['stok'] = $totalStock;
+
+        $produk->update($updateData);
 
         $pk      = $produk->getKey();
         $baseDir = "produk_images/{$pk}";
 
-        // 1) Hapus foto yang dipilih
+        // Hapus foto jika diminta
         if ($request->filled('delete_paths')) {
             foreach ($request->delete_paths as $path) {
                 if (is_string($path) && str_starts_with($path, $baseDir)) {
                     Storage::disk('public')->delete($path);
                 }
             }
-            // Jika yang terhapus adalah foto utama, kosongkan dulu
             if ($produk->gambar_produk && in_array($produk->gambar_produk, $request->delete_paths)) {
                 $produk->update(['gambar_produk' => null]);
             }
         }
 
-        // 2) Upload batch baru (jika ada)
+        // Upload file baru
         $newFiles = [];
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $file) {
@@ -144,7 +173,7 @@ class ProdukController extends Controller
             }
         }
 
-        // 3) Set utama dari batch baru (primary_index)
+        // Set utama dari batch baru
         if ($request->filled('primary_index')) {
             $idx = (int) $request->primary_index;
             if (isset($newFiles[$idx])) {
@@ -152,15 +181,12 @@ class ProdukController extends Controller
             }
         }
 
-        // 4) Atau set utama dari gambar lama (primary_path)
-        if ($request->filled('primary_path')) {
-            $target = $request->primary_path;
-            if (is_string($target) && str_starts_with($target, $baseDir) && Storage::disk('public')->exists($target)) {
-                $produk->update(['gambar_produk' => $target]);
-            }
+        // Atau set utama dari foto lama
+        if ($request->filled('primary_path') && Storage::disk('public')->exists($request->primary_path)) {
+            $produk->update(['gambar_produk' => $request->primary_path]);
         }
 
-        // 5) Fallback: kalau belum ada utama, ambil salah satu yang tersedia
+        // Fallback: jika belum ada utama, ambil salah satu
         if (!$produk->gambar_produk) {
             $all = Storage::disk('public')->exists($baseDir) ? Storage::disk('public')->files($baseDir) : [];
             $imagesOnly = array_values(array_filter($all, fn($p) => preg_match('/\.(jpe?g|png|webp|gif|svg)$/i', $p)));
@@ -176,7 +202,6 @@ class ProdukController extends Controller
     {
         $produk = Produk::findOrFail($id);
 
-        // Hapus seluruh folder foto produk agar bersih
         $pk      = $produk->getKey();
         $baseDir = "produk_images/{$pk}";
         if (Storage::disk('public')->exists($baseDir)) {
@@ -184,104 +209,120 @@ class ProdukController extends Controller
         }
 
         $produk->delete();
-
         return redirect()->route('admin.produk')->with('success', 'Produk berhasil dihapus.');
     }
 
     /**
-     * Katalog produk.
-     * (Opsional) Tambahkan gallery ke tiap produk bila ingin mini-slider di kartu katalog.
+     * Katalog
      */
-public function katalog(Request $request)
-{
-    $q          = trim((string) $request->get('q', ''));
-    $kategoriId = $request->get('kategori_id');
-    $warna      = trim((string) $request->get('warna', ''));
-    $ukuran     = trim((string) $request->get('ukuran', ''));
-    $hargaMin   = $request->get('harga_min');
-    $hargaMax   = $request->get('harga_max');
-    $sort       = $request->get('sort'); // 'terbaru','termurah','termahal','nama'
+    public function katalog(Request $request)
+    {
+        $q          = trim((string) $request->get('q', ''));
+        $kategoriId = $request->get('kategori_id');
+        $warna      = trim((string) $request->get('warna', ''));
+        $ukuran     = trim((string) $request->get('ukuran', ''));
+        $hargaMin   = $request->get('harga_min');
+        $hargaMax   = $request->get('harga_max');
+        $sort       = $request->get('sort');
 
-    $produkQuery = Produk::with('kategori')
-        ->where('stok', '>', 0); // ⬅️ hanya tampilkan produk yang stoknya masih ada
+        $produkQuery = Produk::with('kategori')->where('stok', '>', 0);
 
-    // Search text di nama/deskripsi
-    if ($q !== '') {
-        $produkQuery->where(function($w) use ($q) {
-            $w->where('nama_produk', 'like', "%{$q}%")
-              ->orWhere('deskripsi', 'like', "%{$q}%");
-        });
+        if ($q !== '') {
+            $produkQuery->where(function($w) use ($q) {
+                $w->where('nama_produk', 'like', "%{$q}%")
+                  ->orWhere('deskripsi', 'like', "%{$q}%");
+            });
+        }
+        if (!empty($kategoriId)) $produkQuery->where('kategori_id', $kategoriId);
+        if ($warna !== '') $produkQuery->where('warna', 'like', "%{$warna}%");
+        if ($ukuran !== '') $produkQuery->where('ukuran_tersedia', 'like', "%{$ukuran}%");
+
+        switch ($sort) {
+            case 'termurah':  $produkQuery->orderBy('harga', 'asc'); break;
+            case 'termahal':  $produkQuery->orderBy('harga', 'desc'); break;
+            case 'nama':      $produkQuery->orderBy('nama_produk', 'asc'); break;
+            default:          $produkQuery->latest('id_produk');
+        }
+
+        $produks = $produkQuery->paginate(12)->withQueryString();
+        foreach ($produks as $p) {
+            $dir = "produk_images/".$p->getKey();
+            $files = Storage::disk('public')->exists($dir)
+                ? Storage::disk('public')->files($dir)
+                : [];
+            $p->gallery = array_values(array_filter($files, fn($x)=>preg_match('/\.(jpe?g|png|webp|gif|svg)$/i', $x)));
+        }
+
+        $kategoris = Kategori::orderBy('nama_kategori')->get();
+        return view('katalog', compact('produks','kategoris','q','kategoriId','warna','ukuran','hargaMin','hargaMax','sort'));
     }
-
-    // Filter kategori (opsional)
-    if (!empty($kategoriId)) {
-        $produkQuery->where('kategori_id', $kategoriId);
-    }
-
-    // Filter warna (opsional)
-    if ($warna !== '') {
-        $produkQuery->where('warna', 'like', "%{$warna}%");
-    }
-
-    // Filter ukuran (opsional)
-    if ($ukuran !== '') {
-        $produkQuery->where('ukuran_tersedia', 'like', "%{$ukuran}%");
-    }
-
-    // Filter rentang harga (opsional)
-    if ($hargaMin !== null && $hargaMin !== '') {
-        $produkQuery->where('harga', '>=', (float) $hargaMin);
-    }
-    if ($hargaMax !== null && $hargaMax !== '') {
-        $produkQuery->where('harga', '<=', (float) $hargaMax);
-    }
-
-    // Sorting
-    switch ($sort) {
-        case 'termurah':  $produkQuery->orderBy('harga', 'asc'); break;
-        case 'termahal':  $produkQuery->orderBy('harga', 'desc'); break;
-        case 'nama':      $produkQuery->orderBy('nama_produk', 'asc'); break;
-        default:          $produkQuery->latest('id_produk'); // terbaru
-    }
-
-    $produks = $produkQuery->paginate(12)->withQueryString();
-
-    // OPSIONAL: siapkan gallery per produk (kalau kartumu butuh)
-    foreach ($produks as $p) {
-        $dir = "produk_images/".$p->getKey();
-        $files = Storage::disk('public')->exists($dir)
-            ? Storage::disk('public')->files($dir)
-            : [];
-        $p->gallery = array_values(array_filter($files, fn($x)=>preg_match('/\.(jpe?g|png|webp|gif|svg)$/i', $x)));
-    }
-
-    $kategoris = Kategori::orderBy('nama_kategori')->get();
-
-    return view('katalog', compact('produks','kategoris','q','kategoriId','warna','ukuran','hargaMin','hargaMax','sort'));
-}
-
-
-
 
     /**
-     * Halaman detail / beli: kirim seluruh foto untuk galeri.
+     * Detail produk (beli)
      */
     public function beli($id)
     {
         $produk = Produk::findOrFail($id);
 
-        // warna → array
         $warnaArray = [];
         if (!empty($produk->warna)) {
             $warnaArray = array_map('trim', explode(',', $produk->warna));
         }
 
-        // kumpulkan semua foto untuk galeri detail
         $pk      = $produk->getKey();
         $baseDir = "produk_images/{$pk}";
         $files   = Storage::disk('public')->exists($baseDir) ? Storage::disk('public')->files($baseDir) : [];
         $images  = array_values(array_filter($files, fn($p) => preg_match('/\.(jpe?g|png|webp|gif|svg)$/i', $p)));
 
-        return view('produk2', compact('produk', 'warnaArray', 'images'));
+        // parse ukuran jadi map (key => ['label','stock'])
+        $sizeMap = SizeStock::parse((string) $produk->ukuran_tersedia);
+        $sizeOptions = collect($sizeMap)->map(function ($row, $key) {
+            return [
+                'key'   => $key,
+                'label' => $row['label'] ?? '',
+                'stock' => $row['stock'],
+            ];
+        })->values();
+
+        // ukuran sudah dibeli user login (opsional)
+        $alreadyBoughtSizes = collect();
+        if (Auth::check()) {
+            $user = Auth::user();
+            $successStatuses = ['paid','success','settlement','capture'];
+            $alreadyBoughtSizes = DetailPesanan::query()
+                ->where('id_produk', $produk->id_produk)
+                ->whereNotNull('ukuran')
+                ->whereHas('pesanan', function ($q) use ($user, $successStatuses) {
+                    $q->where('id_user', $user->id_user)->whereIn('status', $successStatuses);
+                })
+                ->pluck('ukuran')
+                ->map(fn($u) => mb_strtolower(trim($u)))
+                ->unique()
+                ->values();
+        }
+
+        return view('produk2', compact(
+            'produk','warnaArray','images','sizeOptions','alreadyBoughtSizes'
+        ));
     }
+   public function getUkuran($id)
+{
+    $produk = \App\Models\Produk::find($id);
+
+    if (!$produk || !$produk->ukuran_tersedia) {
+        return response()->json([]);
+    }
+
+    // Pecah string seperti "S:10, M:5, L:3" jadi array ["S", "M", "L"]
+    $ukuranList = collect(explode(',', $produk->ukuran_tersedia))
+        ->map(function ($item) {
+            $parts = explode(':', trim($item));
+            return trim($parts[0]);
+        })
+        ->filter()
+        ->values();
+
+    return response()->json($ukuranList);
+}
+
 }

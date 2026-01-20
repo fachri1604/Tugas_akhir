@@ -17,16 +17,14 @@
   @endif
 
   @php
-    // nilai default supaya tidak error saat $pesanan null
+    // default supaya tidak error saat $pesanan null
     $productSubtotal = 0;
-    $totalWeight = 0;
   @endphp
 
   @if($pesanan)
     @php
       foreach ($pesanan->detailPesanans as $d) {
           $productSubtotal += (int) $d->produk->harga * (int) $d->jumlah;
-          $totalWeight     += (int) $d->produk->berat * (int) $d->jumlah;
       }
     @endphp
 
@@ -82,12 +80,11 @@
         </select>
       </div>
 
-      {{-- Berat --}}
-      <div class="mb-4">
-        <label class="block mb-1 font-medium">Berat Total (gram)</label>
-        <input type="number" id="weight" name="weight" class="w-full border rounded p-2"
-               value="{{ $totalWeight }}" min="1" required>
-      </div>
+      {{-- Berat (otomatis, hidden) --}}
+      <input type="hidden" id="weight" name="weight" value="{{ $totalWeight }}">
+      {{-- <p class="mb-4 text-sm text-gray-600">
+        Berat total pesanan: <strong>{{ number_format($totalWeight, 0, ',', '.') }} Gram</strong>
+      </p> --}}
 
       {{-- Layanan Kurir --}}
       <div class="mb-4">
@@ -117,7 +114,7 @@
       </button>
     </form>
 
-    {{-- ===================== STRUK PEMBAYARAN (muncul setelah sukses) ===================== --}}
+    {{-- ===================== STRUK PEMBAYARAN ===================== --}}
     <div id="receipt-panel" class="mt-10 hidden print:bg-white">
       <div id="receipt-badge" class="inline-block px-3 py-1 rounded text-white text-sm font-semibold bg-green-600">SUCCESS</div>
 
@@ -151,7 +148,6 @@
                   <span>Rp {{ number_format($d->jumlah * ($d->produk->harga ?? 0), 0, ',', '.') }}</span>
                 </div>
               @endforeach
-              {{-- baris ongkir akan diisi JS dari pilihan layanan --}}
               <div class="flex justify-between" id="rcp-ongkir-row" style="display:none;">
                 <span id="rcp-ongkir-label">Ongkos Kirim</span>
                 <span id="rcp-ongkir-amount">Rp 0</span>
@@ -176,10 +172,8 @@
         <button onclick="window.print()" class="px-4 py-2 bg-gray-800 text-white rounded hover:bg-black">Cetak Struk</button>
         <a href="{{ route('katalog') }}" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Kembali Belanja</a>
         <a href="{{ route('home') }}" class="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Home</a>
-        {{-- <button id="toggle-raw" class="px-4 py-2 border rounded hover:bg-gray-100">Tampilkan Raw Response</button> --}}
       </div>
 
-      <!-- Raw response (collapse) -->
       <pre id="rcp-raw" class="mt-3 text-xs overflow-auto max-h-64 bg-white p-3 border rounded hidden"></pre>
     </div>
     {{-- =================== /STRUK PEMBAYARAN =================== --}}
@@ -206,7 +200,7 @@ $(function(){
   const $city     = $('#city');
   const $district = $('#district');
   const $courier  = $('#courier');
-  const $weight   = $('#weight');
+  const $weight   = $('#weight');   // hidden, tetap dipakai JS
   const $service  = $('#service');
 
   const productTotal = {{ $productSubtotal }};
@@ -252,7 +246,7 @@ $(function(){
   function loadServices(){
     const dest    = $district.val();
     const courier = ($courier.val() || '').toLowerCase();
-    const weight  = parseInt($weight.val(), 10);
+    const weight  = parseInt($weight.val(), 10); // nilai dari hidden input
     if (!dest || !courier || isNaN(weight) || weight < 1) {
       resetService('Isi berat & pilih kurir/kecamatan');
       return;
@@ -305,7 +299,6 @@ $(function(){
     }).catch(()=>{});
   }
 
-  // ==== FUNGSI UTAMA: tampilkan STRUK ====
   function showReceipt(status, result){
     const panel = $('#receipt-panel');
     const badge = $('#receipt-badge');
@@ -315,13 +308,11 @@ $(function(){
     if(status === 'error')   color = 'bg-red-600';
     badge.removeClass('bg-gray-600 bg-green-600 bg-yellow-600 bg-red-600').addClass(color).text(status.toUpperCase());
 
-    // Isi ringkasan dari callback Midtrans
     $('#rcp-order').text(result?.order_id || '-');
     $('#rcp-trans').text(result?.transaction_id || '-');
     $('#rcp-type').text(result?.payment_type || '-');
     $('#rcp-status').text(result?.transaction_status || '-');
 
-    // Ambil ongkir & label layanan dari pilihan user
     const srv = document.getElementById('service');
     const opt = srv && srv.options[srv.selectedIndex];
     const cost = parseInt(opt?.dataset?.cost || '0', 10);
@@ -337,30 +328,20 @@ $(function(){
       $('#rcp-ongkir-row').hide();
     }
 
-    // Subtotal & total
     const subtotalProduk = {{ $productSubtotal }};
     const total = subtotalProduk + (isNaN(cost) ? 0 : cost);
     $('#rcp-subtotal').text(formatRupiah(subtotalProduk));
     $('#rcp-total').text(formatRupiah(total));
 
-    // Raw JSON (opsional)
     $('#rcp-raw').text(JSON.stringify(result || {}, null, 2));
-
-    // Tampilkan panel
     panel.removeClass('hidden');
 
-    // Disable tombol submit supaya tidak dobel bayar
     if(status === 'success'){
       const btn = document.querySelector('#checkoutForm button[type="submit"]');
       if(btn){ btn.disabled = true; btn.textContent = 'Pembayaran Berhasil'; }
     }
   }
 
-  $('#toggle-raw').on('click', function(){
-    $('#rcp-raw').toggleClass('hidden');
-  });
-
-  // Submit → get snapToken → Snap pay → tampilkan struk
   $('#checkoutForm').on('submit', function(e){
     e.preventDefault();
     const serviceVal = $('#service').val();
@@ -414,7 +395,6 @@ $(function(){
 });
 </script>
 
-{{-- Sedikit CSS saat cetak agar tampak seperti struk --}}
 <style>
 @media print{
   body { background: #fff; }

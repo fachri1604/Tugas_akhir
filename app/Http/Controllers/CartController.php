@@ -13,6 +13,8 @@ use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
 use Midtrans\Config;
 use Midtrans\Snap;
+use Illuminate\Support\Facades\DB;
+use App\Support\SizeStock; // ⬅️ PENTING: helper stok per-ukuran
 
 class CartController extends Controller
 {
@@ -77,119 +79,313 @@ class CartController extends Controller
         return view('payment', compact('pesanan', 'snapToken'));
     }
 
-    public function add(Request $request, $id_produk)
-    {
-        $produk = Produk::findOrFail($id_produk);
+public function add(Request $request, $id_produk)
+{
+    $produk = Produk::findOrFail($id_produk);
 
-        if ((int) $produk->stok <= 0) {
-            return back()->with('error', 'Stok produk habis.');
-        }
-
-        $parseList = function (?string $s) {
-            if (!$s) return collect();
-            return collect(preg_split('/\s*[,;|\/]\s*/', $s))
-                ->map(fn($v) => trim($v))
-                ->filter();
-        };
-
-        // ====== SIZE (ukuran) ======
-        $allowedSizeLabels = $parseList($produk->ukuran_tersedia)
-            ->map(function ($v) {
-                $lower = mb_strtolower($v);
-                if (in_array($lower, ['allsize','all size','all-size','all sz','all'])) return 'All Size';
-                return preg_match('/^\d+$/', $v) ? $v : strtoupper($v);
-            })->unique()->values();
-        $allowedSizeKeys = $allowedSizeLabels->map(fn($l) => trim(mb_strtolower($l)))->values()->toArray();
-
-        // ====== COLOR (warna) ======
-        $allowedColorLabels = $parseList($produk->warna)->unique()->values();
-        $allowedColorKeys   = $allowedColorLabels->map(fn($v)=>mb_strtolower($v))->values()->toArray();
-
-        // ====== VALIDASI ======
-        // Catatan:
-        // - ukuran: tetap required jika produk punya daftar ukuran.
-        // - warna : TIDAK REQUIRED walaupun produk punya daftar warna; jika diisi, harus termasuk daftar (Rule::in).
-        $rules = [
-            'jumlah' => ['required','integer','min:1'],
-            'ukuran' => empty($allowedSizeKeys)
-                ? ['nullable','string','max:20']
-                : ['required', Rule::in($allowedSizeKeys)],
-        ];
-
-        if (empty($allowedColorKeys)) {
-            // produk tidak punya daftar warna -> boleh kosong, tanpa Rule::in
-            $rules['warna'] = ['nullable','string','max:30'];
-        } else {
-            // produk punya daftar warna -> tetap nullable (tidak wajib), tapi kalau diisi harus valid
-            $rules['warna'] = ['nullable','string','max:30', Rule::in($allowedColorKeys)];
-        }
-
-        $validated = $request->validate($rules, [
-            'ukuran.in' => 'Ukuran yang dipilih tidak tersedia untuk produk ini.',
-            'warna.in'  => 'Warna yang dipilih tidak tersedia untuk produk ini.',
-        ]);
-
-        // Map key -> label untuk penyimpanan yang rapi
-        $sizeKey       = $validated['ukuran'] ?? null;
-        $colorKey      = $validated['warna']  ?? null;
-        $sizeLabelMap  = array_combine($allowedSizeKeys,  $allowedSizeLabels->all());
-        $colorLabelMap = array_combine($allowedColorKeys, $allowedColorLabels->all());
-        $ukuran        = $sizeKey  !== null ? ($sizeLabelMap[$sizeKey]  ?? $sizeKey)  : null;
-        $warna         = $colorKey !== null ? ($colorLabelMap[$colorKey] ?? $colorKey) : null;
-
-        /** @var \App\Models\User $user */
-        $user = Auth::user();
-
-        $pesanan = Pesanan::firstOrCreate(
-            ['id_user' => $user->id_user, 'status' => 'pending'],
-            ['total_harga' => 0]
-        );
-
-        // Cek apakah sudah ada item yang sama (id_produk + ukuran (nullable) + warna (nullable))
-        $detailQuery = DetailPesanan::where('id_pesanan', $pesanan->id_pesanan)
-            ->where('id_produk', $produk->id_produk);
-
-        $ukuran === null ? $detailQuery->whereNull('ukuran') : $detailQuery->where('ukuran', $ukuran);
-        $warna  === null ? $detailQuery->whereNull('warna')  : $detailQuery->where('warna',  $warna);
-
-        $detail       = $detailQuery->first();
-        $qtyRequested = (int) ($validated['jumlah'] ?? 1);
-        $inCart       = $detail ? (int) $detail->jumlah : 0;
-
-        if ($qtyRequested + $inCart > (int) $produk->stok) {
-            $maks = max(0, (int) $produk->stok - $inCart);
-            return back()->with('error', 'Jumlah melebihi stok. Maksimal yang bisa ditambahkan: '.$maks);
-        }
-
-        if ($detail) {
-            $detail->jumlah   += $qtyRequested;
-            $detail->subtotal  = $detail->jumlah * $produk->harga;
-            $detail->save();
-        } else {
-            DetailPesanan::create([
-                'id_pesanan' => $pesanan->id_pesanan,
-                'id_produk'  => $produk->id_produk,
-                'jumlah'     => $qtyRequested,
-                'ukuran'     => $ukuran,   // bisa null
-                'warna'      => $warna,    // bisa null
-                'subtotal'   => $qtyRequested * $produk->harga,
-            ]);
-        }
-
-        $pesanan->total_harga = DetailPesanan::where('id_pesanan', $pesanan->id_pesanan)->sum('subtotal');
-        $pesanan->save();
-
-        return redirect()->route('cart.index')->with('success', 'Produk berhasil ditambahkan ke keranjang');
+    if ($this->isOutOfStock($produk)) {
+        return back()->with('error', 'Stok produk habis.');
     }
+
+    // ----------------------------------------------------
+    // Ambil rules dengan aman (bisa return array / Collection / null)
+    // ----------------------------------------------------
+    $res = $this->buildValidationRules($produk);
+
+    // Jika Collection -> jadikan array ber-index numerik
+    if ($res instanceof \Illuminate\Support\Collection) {
+        $res = $res->values()->all();
+    } elseif (!is_array($res)) {
+        // cast (misal null -> [], object -> array)
+        $res = (array) $res;
+    }
+
+    // pastikan index 0..2 tersedia
+    $res = array_values($res);           // reindex numeric keys
+    $res = array_pad($res, 3, []);      // tambahkan default apabila kurang
+    [$allowedSizeKeys, $allowedColorKeys, $rules] = $res;
+
+    // safeguard: pastikan semuanya array
+    $allowedSizeKeys  = is_array($allowedSizeKeys)  ? $allowedSizeKeys  : (array)$allowedSizeKeys;
+    $allowedColorKeys = is_array($allowedColorKeys) ? $allowedColorKeys : (array)$allowedColorKeys;
+    $rules            = is_array($rules)            ? $rules            : (array)$rules;
+
+    // ----------------------------------------------------
+    // Validasi input
+    // ----------------------------------------------------
+    $validated = $request->validate($rules, [
+        'ukuran.in' => 'Ukuran tidak tersedia untuk produk ini.',
+        'warna.in'  => 'Warna tidak tersedia untuk produk ini.',
+    ]);
+
+    // ----------------------------------------------------
+    // Normalisasi input dari helper normalizeInput() dengan aman
+    // ----------------------------------------------------
+    $res2 = $this->normalizeInput($validated, $allowedSizeKeys, $allowedColorKeys, $produk);
+
+    if ($res2 instanceof \Illuminate\Support\Collection) {
+        $res2 = $res2->values()->all();
+    } elseif (!is_array($res2)) {
+        $res2 = (array) $res2;
+    }
+    $res2 = array_pad(array_values($res2), 4, null); // ensure 4 slots
+    [$sizeKey, $colorKey, $ukuranLabel, $warnaLabel] = $res2;
+
+    /** @var \App\Models\User $user */
+    $user = Auth::user();
+
+    // Cek sudah pernah dibeli
+    if ($this->alreadyBought($produk, $user, $sizeKey)) {
+        return back()->with('error', 'Ukuran ini sudah pernah kamu beli. Pilih ukuran lain.');
+    }
+
+    // Ambil/buat pesanan pending
+    $pesanan = $this->findOrCreatePendingOrder($user);
+
+    $qtyRequested = (int) ($validated['jumlah'] ?? 1);
+
+    if ($this->exceedsStock($produk, $pesanan, $sizeKey, $colorKey, $qtyRequested)) {
+        return back()->with('error', 'Jumlah melebihi stok yang tersedia.');
+    }
+
+    $this->addToCart($pesanan, $produk, $sizeKey, $colorKey, $qtyRequested);
+
+    return redirect()->route('cart.index')->with('success', 'Produk berhasil ditambahkan ke keranjang');
+}
+
+
+/**
+ * Cek stok global produk
+ */
+private function isOutOfStock($produk): bool
+{
+    return (int)$produk->stok <= 0;
+}
+
+/**
+ * Bangun rules validasi berdasarkan ukuran & warna
+ */
+/**
+ * Bangun rules validasi berdasarkan ukuran & warna
+ */
+private function parseStockString(?string $value): array
+{
+    if (!$value) return [];
+
+    // Jika format "S=1,M=1,L=1"
+    if (str_contains($value, '=')) {
+        $pairs = explode(',', $value);
+        $result = [];
+
+        foreach ($pairs as $pair) {
+            if (str_contains($pair, '=')) {
+                [$key, $val] = explode('=', $pair);
+                $result[trim($key)] = (int) $val;
+            }
+        }
+        return $result;
+    }
+
+    // Jika hanya teks biasa seperti "Biru" atau "Merah"
+    return [trim($value) => 1];
+}
+
+
+private function buildValidationRules($produk)
+{
+    // ✅ Gunakan kolom yang benar
+    $availableSizes = $this->parseStockString($produk->ukuran_tersedia ?? $produk->ukuran ?? '');
+    $availableColors = $this->parseStockString($produk->warna ?? '');
+
+    $allowedSizeKeys = array_keys($availableSizes);
+    $allowedColorKeys = array_keys($availableColors);
+
+    // Jika kosong, tambahkan placeholder biar validasi tidak error
+    $allowedSizeKeys = count($allowedSizeKeys) ? $allowedSizeKeys : ['default'];
+    $allowedColorKeys = count($allowedColorKeys) ? $allowedColorKeys : ['default'];
+
+    $rules = [
+        'ukuran' => ['required', Rule::in($allowedSizeKeys)],
+        'warna'  => ['required', Rule::in($allowedColorKeys)],
+        'jumlah' => ['required', 'integer', 'min:1']
+    ];
+
+    return [$allowedSizeKeys, $allowedColorKeys, $rules];
+}
+
+
+
+
+
+/**
+ * Normalisasi input ukuran & warna
+ */
+/**
+ * Normalisasi input ukuran & warna dengan aman
+ */
+private function normalizeInput(array $validated, array $allowedSizeKeys, array $allowedColorKeys, $produk): array
+{
+    $parseList = function (?string $s) {
+        if (!$s) return collect();
+        return collect(preg_split('/\s*[,;|\/]\s*/', $s))
+            ->map(fn($v) => trim($v))
+            ->filter();
+    };
+
+    $allowedSizeLabels = $parseList($produk->ukuran_tersedia)
+        ->map(function ($v) {
+            $lower = mb_strtolower($v);
+            if (in_array($lower, ['allsize','all size','all-size','all sz','all'])) return 'All Size';
+            return preg_match('/^\d+$/', $v) ? $v : strtoupper($v);
+        })->unique()->values()->all();
+
+    $allowedColorLabels = $parseList($produk->warna)->unique()->values()->all();
+
+    // ==== Buat mapping aman tanpa array_combine() ====
+    $sizeLabelMap = [];
+    $lenS = min(count($allowedSizeKeys), count($allowedSizeLabels));
+    for ($i = 0; $i < $lenS; $i++) {
+        $sizeLabelMap[$allowedSizeKeys[$i]] = $allowedSizeLabels[$i];
+    }
+    for ($i = $lenS; $i < count($allowedSizeKeys); $i++) {
+        $sizeLabelMap[$allowedSizeKeys[$i]] = strtoupper($allowedSizeKeys[$i]);
+    }
+
+    $colorLabelMap = [];
+    $lenC = min(count($allowedColorKeys), count($allowedColorLabels));
+    for ($i = 0; $i < $lenC; $i++) {
+        $colorLabelMap[$allowedColorKeys[$i]] = $allowedColorLabels[$i];
+    }
+    for ($i = $lenC; $i < count($allowedColorKeys); $i++) {
+        $colorLabelMap[$allowedColorKeys[$i]] = strtoupper($allowedColorKeys[$i]);
+    }
+
+    // ==== Normalisasi input ====
+    $sizeKey  = isset($validated['ukuran']) ? trim(mb_strtolower($validated['ukuran'])) : null;
+    $colorKey = isset($validated['warna'])  ? trim(mb_strtolower($validated['warna']))  : null;
+
+    $ukuranLabel = $sizeKey !== null ? ($sizeLabelMap[$sizeKey] ?? $sizeKey) : null;
+    $warnaLabel  = $colorKey !== null ? ($colorLabelMap[$colorKey] ?? $colorKey) : null;
+
+    return [$sizeKey, $colorKey, $ukuranLabel, $warnaLabel];
+}
+
+
+/**
+ * Cek apakah user sudah pernah beli ukuran ini
+ */
+private function alreadyBought($produk, $user, ?string $sizeKey): bool
+{
+    $successStatuses = ['paid','success','settlement','capture'];
+
+    return DetailPesanan::query()
+        ->where('id_produk', $produk->id_produk)
+        ->when($sizeKey !== null, fn($q)=>$q->whereRaw('LOWER(ukuran)=?', [$sizeKey]))
+        ->whereHas('pesanan', function ($q) use ($user, $successStatuses) {
+            $q->where('id_user', $user->id_user)->whereIn('status', $successStatuses);
+        })
+        ->exists();
+}
+
+/**
+ * Ambil / buat pesanan pending user
+ */
+private function findOrCreatePendingOrder($user)
+{
+    return Pesanan::firstOrCreate(
+        ['id_user' => $user->id_user, 'status' => 'pending'],
+        ['total_harga' => 0]
+    );
+}
+
+/**
+ * Cek stok global & stok per ukuran
+ */
+private function exceedsStock($produk, $pesanan, ?string $sizeKey, ?string $colorKey, int $qtyRequested): bool
+{
+    $detailQuery = DetailPesanan::where('id_pesanan', $pesanan->id_pesanan)
+        ->where('id_produk', $produk->id_produk);
+
+    $sizeKey === null ? $detailQuery->whereNull('ukuran') : $detailQuery->whereRaw('LOWER(ukuran)=?', [$sizeKey]);
+    $colorKey === null ? $detailQuery->whereNull('warna')  : $detailQuery->whereRaw('LOWER(warna)=?',  [$colorKey]);
+
+    $detail = $detailQuery->first();
+    $inCart = $detail ? (int) $detail->jumlah : 0;
+
+    // Cek stok global
+    if ($qtyRequested + $inCart > (int) $produk->stok) {
+        return true;
+    }
+
+    // (Opsional) jika kamu pakai sistem stok per ukuran → tambahkan pengecekan di sini
+
+    return false;
+}
+
+/**
+ * Tambahkan item ke keranjang
+ */
+private function addToCart($pesanan, $produk, ?string $sizeKey, ?string $colorKey, int $qtyRequested): void
+{
+    $detailQuery = DetailPesanan::where('id_pesanan', $pesanan->id_pesanan)
+        ->where('id_produk', $produk->id_produk);
+
+    $sizeKey === null ? $detailQuery->whereNull('ukuran') : $detailQuery->whereRaw('LOWER(ukuran)=?', [$sizeKey]);
+    $colorKey === null ? $detailQuery->whereNull('warna')  : $detailQuery->whereRaw('LOWER(warna)=?',  [$colorKey]);
+
+    $detail = $detailQuery->first();
+
+    if ($detail) {
+        $detail->jumlah   += $qtyRequested;
+        $detail->subtotal  = $detail->jumlah * $produk->harga;
+        $detail->save();
+    } else {
+        DetailPesanan::create([
+            'id_pesanan' => $pesanan->id_pesanan,
+            'id_produk'  => $produk->id_produk,
+            'jumlah'     => $qtyRequested,
+            'ukuran'     => $sizeKey,
+            'warna'      => $colorKey,
+            'subtotal'   => $qtyRequested * $produk->harga,
+        ]);
+    }
+
+    $pesanan->total_harga = DetailPesanan::where('id_pesanan', $pesanan->id_pesanan)->sum('subtotal');
+    $pesanan->save();
+}
 
     public function update(Request $request, $id_detail)
     {
         $detail = DetailPesanan::findOrFail($id_detail);
         $produk = $detail->produk;
+
         $newQty = (int) $request->jumlah;
         if ($newQty < 1) $newQty = 1;
+
+        // Cek stok global
         if ($newQty > (int) $produk->stok) {
             return back()->with('error', 'Jumlah melebihi stok yang tersedia.');
+        }
+
+        // Cek stok per-ukuran (bila ada angkanya & detail memiliki ukuran)
+        $sizeKey = $detail->ukuran ? trim(mb_strtolower($detail->ukuran)) : null;
+        if ($sizeKey !== null) {
+            $sizeMap = SizeStock::parse((string)$produk->ukuran_tersedia);
+            if (isset($sizeMap[$sizeKey]) && $sizeMap[$sizeKey]['stock'] !== null) {
+                $sizeStock = (int) $sizeMap[$sizeKey]['stock'];
+
+                // berapa qty item varian ini selain current detail dalam pesanan yang sama?
+                $inCartOther = DetailPesanan::where('id_pesanan', $detail->id_pesanan)
+                    ->where('id_produk', $detail->id_produk)
+                    ->whereRaw('LOWER(ukuran)=?', [$sizeKey])
+                    ->where('id_detail', '!=', $detail->id_detail)
+                    ->sum('jumlah');
+
+                if ($newQty + (int)$inCartOther > $sizeStock) {
+                    $maks = max(0, $sizeStock - (int)$inCartOther);
+                    return back()->with('error', 'Jumlah melebihi stok ukuran. Maksimal: ' . $maks);
+                }
+            }
         }
 
         $detail->jumlah   = $newQty;
@@ -228,8 +424,12 @@ class CartController extends Controller
                 ->where('status', 'pending')
                 ->firstOrFail();
 
+            // ✅ Hitung total berat di server
+            $totalWeight = $this->calculateTotalWeight($pesanan);
+
+            // Ambil provinsi dari API
             $response = Http::withHeaders(['key' => config('rajaongkir.api_key')])
-                ->get(rtrim(config('rajaongkir.base_url'), '/').'/destination/province');
+                ->get(rtrim(config('rajaongkir.base_url'), '/') . '/destination/province');
 
             if (!$response->successful()) {
                 throw new \Exception("API request failed with status: " . $response->status());
@@ -245,7 +445,7 @@ class CartController extends Controller
                 'name' => $item['name'],
             ]);
 
-            $cities = collect(); // biarkan kosong, diisi via AJAX setelah pilih provinsi
+            $cities = collect(); // diisi via AJAX setelah pilih provinsi
 
             $couriers = [
                 ['code' => 'jne',     'name' => 'JNE'],
@@ -255,7 +455,14 @@ class CartController extends Controller
 
             $originCityId = config('rajaongkir.origin');
 
-            return view('checkoutform', compact('pesanan', 'provinces', 'cities', 'originCityId', 'couriers'));
+            return view('checkoutform', compact(
+                'pesanan',
+                'provinces',
+                'cities',
+                'originCityId',
+                'couriers',
+                'totalWeight'
+            ));
         } catch (\Exception $e) {
             Log::error('CheckoutForm Error: ' . $e->getMessage());
 
@@ -271,15 +478,13 @@ class CartController extends Controller
     }
 
     public function checkoutProcess(Request $request, $id_pesanan)
-    {
-        // Validasi input dari form (total_bayar tidak dipakai; kita hitung sendiri)
+    {        
         $data = $request->validate([
             'alamat'      => 'required|string|max:255',
             'provinsi'    => 'required',
             'kota'        => 'required',
             'district_id' => 'required',
             'kurir'       => 'required|string',
-            'weight'      => 'required|integer|min:1',
             'service'     => 'required|string',
             'ongkir'      => 'required|integer|min:0',
         ]);
@@ -296,12 +501,15 @@ class CartController extends Controller
         $user->alamat = (string) $data['alamat'];
         $user->save();
 
+        // ✅ Hitung ulang berat di server (abaikan input user)
+        $serverWeight = $this->calculateTotalWeight($pesanan);
+
         // Verifikasi ongkir ke API; jika gagal, pakai nilai dari client
         try {
             $resp     = $this->callOngkirApi([
                 'origin'      => (string) config('rajaongkir.origin'),
                 'destination' => (string) $data['district_id'],
-                'weight'      => (int)    $data['weight'],
+                'weight'      => (int)    $serverWeight,   // ⬅️ pakai berat server
                 'courier'     => (string) $data['kurir'],
                 'price'       => 'lowest',
             ]);
@@ -309,13 +517,13 @@ class CartController extends Controller
             $selected   = $this->pickService($rows, $data['service']);
             $ongkir     = (int) $selected['cost'];
             $service    = (string) $selected['service'];
-            $serviceDesc= (string) $selected['desc'];
+            $serviceDesc = (string) $selected['desc'];
             $etd        = (string) $selected['etd'];
         } catch (\Throwable $e) {
-            Log::warning('[Ongkir] fallback to client value: '.$e->getMessage());
+            Log::warning('[Ongkir] fallback to client value: ' . $e->getMessage());
             $ongkir     = (int) $data['ongkir'];
             $service    = (string) $data['service'];
-            $serviceDesc= '';
+            $serviceDesc = '';
             $etd        = '';
         }
 
@@ -327,7 +535,7 @@ class CartController extends Controller
         $pesanan->service_code = $service;
         $pesanan->service_desc = $serviceDesc;
         $pesanan->etd          = $etd;
-        $pesanan->weight       = (int) $data['weight'];
+        $pesanan->weight       = (int) $serverWeight;  // ⬅️ simpan berat yang benar
         $pesanan->ongkir       = (int) $ongkir;
         $pesanan->status       = 'pending';
 
@@ -345,7 +553,7 @@ class CartController extends Controller
         Config::$is3ds        = true;
 
         // Order ID unik untuk Midtrans
-        $midtransOrderId = 'ORD-'.$pesanan->id_pesanan.'-'.Str::upper(Str::random(6));
+        $midtransOrderId = 'ORD-' . $pesanan->id_pesanan . '-' . Str::upper(Str::random(6));
         $pesanan->midtrans_order_id = $midtransOrderId;
         $pesanan->save();
 
@@ -369,29 +577,30 @@ class CartController extends Controller
             $snapToken = Snap::getSnapToken($params);
             return response()->json(['success' => true, 'snap_token' => $snapToken]);
         } catch (\Throwable $e) {
-            Log::error('[Midtrans] '.$e->getMessage(), ['params' => $params]);
+            Log::error('[Midtrans] ' . $e->getMessage(), ['params' => $params]);
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal menyiapkan pembayaran: '.$e->getMessage(),
+                'message' => 'Gagal menyiapkan pembayaran: ' . $e->getMessage(),
             ], 500);
         }
     }
 
     /** ================== Helpers ================== */
 
-    private function validateCheckout(Request $request): array
+    // ✅ Helper: hitung total berat dari item keranjang
+    private function calculateTotalWeight(Pesanan $pesanan): int
     {
-        // Tidak dipakai lagi, tapi disediakan kalau ingin dipanggil
-        return $request->validate([
-            'alamat'      => 'required|string|max:255',
-            'provinsi'    => 'required',
-            'kota'        => 'required',
-            'district_id' => 'required',
-            'kurir'       => 'required|string',
-            'weight'      => 'required|integer|min:1',
-            'service'     => 'required|string',
-            'ongkir'      => 'required|integer|min:0',
-        ]);
+        // jumlah total item di keranjang (menjumlahkan kolom 'jumlah' di semua detail)
+        $totalItems = 0;
+        foreach ($pesanan->detailPesanans as $d) {
+            $totalItems += (int) ($d->jumlah ?? 0);
+        }
+
+        // 1 kg per item -> 1000 gram × total item
+        $totalWeightGrams = $totalItems * 1000;
+
+        // minimal 1 gram agar API tidak error
+        return max(1, $totalWeightGrams);
     }
 
     private function callOngkirApi(array $payload): array
@@ -450,7 +659,7 @@ class CartController extends Controller
             }
         }
         usort($rows, fn($a, $b) => $a['cost'] <=> $b['cost']);
-        return $rows[0];
+        return $rows[0] ?? ['courier' => '', 'service' => '', 'desc' => '', 'cost' => 0, 'etd' => ''];
     }
 
     // === Helper: buat item_details dan hitung gross dari sum total ===
@@ -478,5 +687,35 @@ class CartController extends Controller
         }
 
         return [$items, $gross];
+    }
+
+    // Bayar di Lokasi (COD) – tidak terpengaruh perubahan berat
+    public function payOnSite(Request $request, $id_pesanan)
+    {
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+
+        $pesanan = Pesanan::with('detailPesanans.produk')
+            ->where('id_pesanan', $id_pesanan)
+            ->where('id_user', $user->id_user)
+            ->where('status', 'pending') // tetap pending, karena enum cuma 3 nilai
+            ->firstOrFail();
+
+        // Cek stok (opsional)
+        foreach ($pesanan->detailPesanans as $detail) {
+            if ($detail->produk->stok < $detail->jumlah) {
+                return redirect()->route('cart.index')
+                    ->with('error', "Stok produk '{$detail->produk->nama_produk}' tidak cukup.");
+            }
+        }
+
+        // Tandai sebagai COD via midtrans_order_id, status tetap pending
+        $pesanan->midtrans_order_id = 'COD-' . $pesanan->id_pesanan . '-' . Str::upper(Str::random(6));
+        $pesanan->status = 'pending'; // biarkan pending sampai admin proses
+        $pesanan->save();
+
+        return redirect()
+            ->route('orders.thankyou', $pesanan->id_pesanan)
+            ->with('success', 'Pesanan dibuat sebagai Bayar di Lokasi (COD). Admin akan memproses.');
     }
 }
